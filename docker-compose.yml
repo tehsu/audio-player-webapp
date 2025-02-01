@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - /run/user/1000/pulse:/run/user/1000/pulse  # PulseAudio socket
+      - ${HOME}/.config/pulse/cookie:/root/.config/pulse/cookie  # PulseAudio cookie
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=app.py
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - PULSE_COOKIE=/root/.config/pulse/cookie
+    restart: unless-stopped
+    group_add:
+      - audio

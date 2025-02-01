@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.env
+
+# Editor directories and files
+.idea
+.vscode
+*.swp
+*.swo
+
+# Application specific
+uploads/*
+!uploads/.gitkeep

@@ -1,0 +1,3 @@
+Flask==2.3.3
+python-vlc==3.0.18122
+APScheduler==3.10.1

@@ -19,25 +19,59 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Virtual Environment
 venv/
 env/
 ENV/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+.*.sw[a-p]
 
 # OS
 .DS_Store
 Thumbs.db
+*.bak
+*.tmp
+*.temp
 
 # Logs
 *.log
+logs/
+npm-debug.log*
 
 # Local development settings
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Application specific
+uploads/*
+!uploads/.gitkeep
+*.mp3
+*.wav
+*.ogg
+*.m4a
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock

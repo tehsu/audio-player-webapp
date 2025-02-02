@@ -199,6 +199,8 @@
             <button id="stopBtn" disabled>Stop</button>
             <button id="deckLinkBtn" disabled>Output to Blackmagic</button>
             <button id="stopDeckLinkBtn" disabled>Stop Blackmagic</button>
+            <button id="airplayBtn">Start AirPlay</button>
+            <button id="stopAirplayBtn" disabled>Stop AirPlay</button>
         </div>
         <div class="progress-container" style="display: none;">
             <div class="progress-bar">
@@ -234,6 +236,8 @@
         const stopBtn = document.getElementById('stopBtn');
         const deckLinkBtn = document.getElementById('deckLinkBtn');
         const stopDeckLinkBtn = document.getElementById('stopDeckLinkBtn');
+        const airplayBtn = document.getElementById('airplayBtn');
+        const stopAirplayBtn = document.getElementById('stopAirplayBtn');
         const mediaFile = document.getElementById('mediaFile');
         const status = document.getElementById('status');
         const mediaInfo = document.getElementById('mediaInfo');
@@ -487,6 +491,48 @@
             }
         });
 
+        airplayBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/start_airplay', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showStatus(data.message);
+                    airplayBtn.disabled = true;
+                    stopAirplayBtn.disabled = false;
+                    deckLinkBtn.disabled = true;
+                } else {
+                    showStatus(data.error, true);
+                }
+            } catch (error) {
+                console.error('Error starting AirPlay:', error);
+                showStatus('Error starting AirPlay', true);
+            }
+        });
+        
+        stopAirplayBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/stop_airplay', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showStatus(data.message);
+                    airplayBtn.disabled = false;
+                    stopAirplayBtn.disabled = true;
+                    deckLinkBtn.disabled = false;
+                } else {
+                    showStatus(data.error, true);
+                }
+            } catch (error) {
+                console.error('Error stopping AirPlay:', error);
+                showStatus('Error stopping AirPlay', true);
+            }
+        });
+
         // Initialize Socket.IO
         const socket = io();
         let seeking = false;
@@ -498,9 +544,11 @@
                 updatePlaybackState(state.is_playing);
                 updateVolumeDisplay(state.volume);
                 
-                // Update Blackmagic buttons
-                deckLinkBtn.disabled = !state.current_file || state.decklink_active;
+                // Update Blackmagic and AirPlay buttons
+                deckLinkBtn.disabled = !state.current_file || state.decklink_active || state.airplay_active;
                 stopDeckLinkBtn.disabled = !state.decklink_active;
+                airplayBtn.disabled = state.airplay_active;
+                stopAirplayBtn.disabled = !state.airplay_active;
             }
         });
         

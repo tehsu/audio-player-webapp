@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from werkzeug.utils import secure_filename
 from PIL import Image
 import subprocess
+import cv2
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
@@ -21,7 +22,8 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 player = None
-decklink_player = None  # Separate player for Blackmagic output
+decklink_player = None
+airplay_capture = None
 current_media = None
 decklink_media = None
 player_state = {
@@ -30,7 +32,8 @@ player_state = {
     'position': 0,
     'is_playing': False,
     'volume': 100,
-    'decklink_active': False
+    'decklink_active': False,
+    'airplay_active': False
 }
 
 # VLC instance options for virtual display
@@ -88,6 +91,20 @@ def init_decklink_player():
             raise
     else:
         logger.debug("Using existing Decklink player instance")
+
+def init_airplay_capture():
+    """Initialize video capture from UxPlay v4l2loopback device"""
+    global airplay_capture
+    try:
+        airplay_capture = cv2.VideoCapture('/dev/video0')
+        airplay_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
+        airplay_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
+        airplay_capture.set(cv2.CAP_PROP_FPS, 60)
+        logger.info("Initialized AirPlay video capture")
+        return True
+    except Exception as e:
+        logger.error(f"Error initializing AirPlay capture: {e}")
+        return False
 
 def is_video_file(filename):
     """Check if the file is a video based on its extension"""
@@ -404,6 +421,73 @@ def stop_decklink():
     except Exception as e:
         logger.error(f"Error stopping Blackmagic output: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+@app.route('/start_airplay', methods=['POST'])
+def start_airplay():
+    """Start AirPlay capture and output to Blackmagic"""
+    try:
+        if start_airplay_capture():
+            return jsonify({'message': 'Started AirPlay capture'})
+        return jsonify({'error': 'Failed to start AirPlay capture'}), 500
+    except Exception as e:
+        logger.error(f"Error in start_airplay route: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stop_airplay', methods=['POST'])
+def stop_airplay():
+    """Stop AirPlay capture and Blackmagic output"""
+    try:
+        if stop_airplay_capture():
+            return jsonify({'message': 'Stopped AirPlay capture'})
+        return jsonify({'error': 'Failed to stop AirPlay capture'}), 500
+    except Exception as e:
+        logger.error(f"Error in stop_airplay route: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def start_airplay_capture():
+    """Start capturing from UxPlay and output to Blackmagic"""
+    try:
+        if not init_airplay_capture():
+            return False
+
+        init_decklink_player()
+        
+        # Create a media instance for the v4l2loopback device
+        instance = vlc.Instance(' '.join(decklink_options))
+        global decklink_media
+        decklink_media = instance.media_new("v4l2:///dev/video0")
+        decklink_player.set_media(decklink_media)
+        
+        # Start playback
+        decklink_player.play()
+        player_state['decklink_active'] = True
+        player_state['airplay_active'] = True
+        
+        logger.info("Started AirPlay capture and Blackmagic output")
+        return True
+    except Exception as e:
+        logger.error(f"Error starting AirPlay capture: {e}")
+        return False
+
+def stop_airplay_capture():
+    """Stop AirPlay capture and Blackmagic output"""
+    try:
+        global airplay_capture
+        if airplay_capture:
+            airplay_capture.release()
+            airplay_capture = None
+        
+        if decklink_player:
+            decklink_player.stop()
+        
+        player_state['decklink_active'] = False
+        player_state['airplay_active'] = False
+        
+        logger.info("Stopped AirPlay capture and Blackmagic output")
+        return True
+    except Exception as e:
+        logger.error(f"Error stopping AirPlay capture: {e}")
+        return False
 
 if __name__ == '__main__':
     try:

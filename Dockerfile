@@ -9,7 +9,36 @@ RUN apt-get update && apt-get install -y \
     && dpkg -i Blackmagic_Desktop_Video_Linux_12.4/deb/x86_64/desktopvideo_12.4_amd64.deb \
     && rm -rf Blackmagic_Desktop_Video_Linux_12.4*
 
-# Install VLC and dependencies
+# Install build dependencies for UxPlay
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    cmake \
+    libavahi-compat-libdnssd-dev \
+    libssl-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libplist-dev \
+    libfdk-aac-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build and install UxPlay
+RUN git clone https://github.com/FDH2/UxPlay.git && \
+    cd UxPlay && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    cd ../.. && \
+    rm -rf UxPlay
+
+# Install VLC and other dependencies
 RUN apt-get update && apt-get install -y \
     vlc \
     libvlc-dev \
@@ -24,6 +53,8 @@ RUN apt-get update && apt-get install -y \
     xauth \
     imagemagick \
     ffmpeg \
+    v4l2loopback-dkms \
+    v4l2loopback-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -39,8 +70,8 @@ COPY . .
 RUN echo '#!/bin/bash\nXvfb :99 -screen 0 3840x2160x24 &\nexport DISPLAY=:99\nsleep 1\necho "Starting Flask app..."\nexec python app.py' > /app/start.sh && \
     chmod +x /app/start.sh
 
-# Expose port 5000 for Flask
-EXPOSE 5000
+# Expose ports for Flask and UxPlay
+EXPOSE 5000 7000 7001 7100
 
 # Set display environment variable
 ENV DISPLAY=:99

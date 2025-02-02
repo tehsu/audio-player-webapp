@@ -5,6 +5,9 @@ services:
     build: .
     ports:
       - "5000:5000"
+      - "7000:7000"  # UxPlay RTSP
+      - "7001:7001"  # UxPlay control
+      - "7100:7100"  # UxPlay timing
     volumes:
       - .:/app
       - /run/user/1000/pulse:/run/user/1000/pulse  # PulseAudio socket
@@ -12,6 +15,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix  # X11 socket
       - /run/user/1000:/run/user/1000  # XDG runtime directory
       - /dev/blackmagic:/dev/blackmagic  # Blackmagic device access
+      - /dev/video0:/dev/video0  # v4l2loopback device
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
@@ -24,9 +28,11 @@ services:
     devices:
       - /dev/dri  # GPU device
       - /dev/blackmagic  # Blackmagic device
+      - /dev/video0  # v4l2loopback device
     group_add:
       - audio
       - video  # Required for GPU access
+    network_mode: host  # Required for UxPlay discovery
     privileged: true  # Required for Blackmagic device access
     restart: unless-stopped
     tmpfs:

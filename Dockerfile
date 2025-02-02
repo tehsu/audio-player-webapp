@@ -35,7 +35,12 @@ RUN apt-get update && apt-get install -y \
     libplist-dev \
     wget \
     gnupg \
+    avahi-daemon \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure Avahi to work in containers
+RUN sed -i 's/.*enable-dbus=.*/enable-dbus=no/' /etc/avahi/avahi-daemon.conf && \
+    sed -i 's/.*disallow-other-stacks=.*/disallow-other-stacks=no/' /etc/avahi/avahi-daemon.conf
 
 # Build and install UxPlay
 RUN git clone https://github.com/FDH2/UxPlay.git && \

@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # Load v4l2loopback module
 #modprobe v4l2loopback devices=1 video_nr=0 exclusive_caps=1 card_label="UxPlay"
 
@@ -12,6 +11,12 @@ sleep 1
 
 # Export display for X11 applications
 export DISPLAY=:99
+
+# Start Avahi daemon
+avahi-daemon --no-chroot -D
+
+# Wait for Avahi to start
+sleep 2
 
 # Start PulseAudio in daemon mode
 # pulseaudio --start --log-target=syslog

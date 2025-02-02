@@ -66,10 +66,11 @@ def monitor_ffmpeg_progress(process):
     progress_pattern = re.compile(r'(frame|fps|speed)=\s*([\d.]+)')
     
     while process.poll() is None:
-        line = process.stderr.readline().decode('utf-8', errors='ignore')
+        line = process.stderr.readline()
         if not line:
             continue
             
+        # Line is already a string because of universal_newlines=True
         matches = progress_pattern.finditer(line)
         for match in matches:
             key, value = match.groups()
@@ -99,7 +100,7 @@ def play_media(filepath, seek_position=0):
         except subprocess.TimeoutExpired:
             ffmpeg_process.kill()
             ffmpeg_process.wait()
-        
+    
     volume = 100.0
     
     cmd = [
@@ -133,8 +134,8 @@ def play_media(filepath, seek_position=0):
         cmd,
         stdout=subprocess.PIPE if not player_state['decklink_active'] else None,
         stderr=subprocess.PIPE,
-        universal_newlines=True,
-        bufsize=1
+        universal_newlines=True,  # This makes readline() return strings
+        bufsize=1  # Line buffered
     )
     
     # Start progress monitoring thread
@@ -462,13 +463,12 @@ def stop():
 def output_to_decklink():
     """Output current media to Blackmagic device"""
     try:
-        data = request.get_json()
-        if not data or 'filename' not in data:
-            return jsonify({'error': 'No filename provided'}), 400
-
-        filename = data['filename']
+        if not current_media:
+            return jsonify({'error': 'No media loaded'}), 400
+        
+        filename = os.path.basename(current_media)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
+        
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
 
@@ -477,7 +477,7 @@ def output_to_decklink():
             logger.info(f"Converting image to video for Blackmagic output: {filename}")
             video_path = convert_image_to_video(filepath)
             if not video_path:
-                return jsonify({'error': 'Failed to convert image'}), 500
+                return jsonify({'error': 'Failed to convert image to video'}), 500
             filepath = video_path
 
         # Create media for Decklink output
@@ -498,8 +498,8 @@ def output_to_decklink():
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True,
-            bufsize=1
+            universal_newlines=True,  # This makes readline() return strings
+            bufsize=1  # Line buffered
         )
         
         # Start progress monitoring thread

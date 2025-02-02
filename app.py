@@ -108,12 +108,44 @@ def stop_playback():
     """Stop media playback"""
     global ffmpeg_process, player_state
     if ffmpeg_process:
-        ffmpeg_process.terminate()
-        ffmpeg_process.wait()
-        ffmpeg_process = None
+        try:
+            # Send SIGTERM to FFmpeg process
+            ffmpeg_process.terminate()
+            # Wait up to 5 seconds for process to terminate
+            try:
+                ffmpeg_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # If FFmpeg hasn't terminated after 5 seconds, force kill it
+                ffmpeg_process.kill()
+                ffmpeg_process.wait()
+        except Exception as e:
+            logger.error(f"Error stopping FFmpeg process: {e}")
+        finally:
+            ffmpeg_process = None
+    
     player_state['is_playing'] = False
     player_state['position'] = 0
     update_player_state()
+
+def pause_playback():
+    """Pause media playback using SIGSTOP/SIGCONT"""
+    global ffmpeg_process, player_state
+    if ffmpeg_process:
+        try:
+            if player_state['is_playing']:
+                # Send SIGSTOP to pause
+                os.kill(ffmpeg_process.pid, signal.SIGSTOP)
+                player_state['is_playing'] = False
+            else:
+                # Send SIGCONT to resume
+                os.kill(ffmpeg_process.pid, signal.SIGCONT)
+                player_state['is_playing'] = True
+            update_player_state()
+            return True
+        except Exception as e:
+            logger.error(f"Error pausing/resuming FFmpeg process: {e}")
+            return False
+    return False
 
 def set_volume(volume):
     """Set playback volume"""
@@ -374,13 +406,13 @@ def play():
 
 @app.route('/pause', methods=['POST'])
 def pause():
-    global player_state
-    stop_playback()
-    return jsonify({'status': 'success'})
+    if pause_playback():
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error', 'message': 'No media playing'})
 
 @app.route('/stop', methods=['POST'])
 def stop():
-    global player_state, current_media
+    global current_media
     stop_playback()
     current_media = None
     return jsonify({'status': 'success'})

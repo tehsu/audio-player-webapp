@@ -1,11 +1,15 @@
 FROM python:3.11-slim
 
-# Install VLC and its dependencies including PulseAudio
+# Install VLC and PipeWire dependencies
 RUN apt-get update && apt-get install -y \
     vlc \
     libvlc-dev \
-    pulseaudio \
-    pulseaudio-utils \
+    pipewire \
+    pipewire-audio \
+    libspa-0.2-modules \
+    pipewire-alsa \
+    pipewire-pulse \
+    wireplumber \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

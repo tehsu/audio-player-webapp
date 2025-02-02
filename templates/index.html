@@ -595,6 +595,15 @@
             document.getElementById('currentTime').textContent = formatTime(player_state.position);
             document.getElementById('duration').textContent = formatTime(player_state.duration);
 
+            // Update button states
+            const playBtn = document.getElementById('playBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const stopBtn = document.getElementById('stopBtn');
+
+            playBtn.disabled = !player_state.current_file || player_state.is_playing;
+            pauseBtn.disabled = !player_state.current_file || !player_state.is_playing;
+            stopBtn.disabled = !player_state.current_file;
+
             // Update Blackmagic and AirPlay buttons
             deckLinkBtn.disabled = !player_state.current_file || player_state.decklink_active || player_state.airplay_active;
             stopDeckLinkBtn.disabled = !player_state.decklink_active;

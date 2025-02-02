@@ -296,6 +296,7 @@ def start_airplay_capture():
             '-f', 'decklink',
             '-c:v', 'rawvideo',
             '-c:a', 'pcm_s16le',
+            '-progress', 'pipe:2',
             'DeckLink Output'
         ]
         
@@ -393,23 +394,20 @@ def select_file():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        logger.error("No file part in request")
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        logger.error("No selected file in request")
-        return jsonify({'error': 'No selected file'}), 400
-
-    if file:
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        logger.info(f"Uploading file: {filename}")
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
         
-        # Stream the file in chunks to handle large files
-        try:
-            chunk_size = 8192  # 8KB chunks
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if file:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
+            # Save file in chunks
+            chunk_size = 8192
             with open(filepath, 'wb') as f:
                 while True:
                     chunk = file.stream.read(chunk_size)
@@ -423,16 +421,21 @@ def upload_file():
             player_state['duration'] = get_video_duration(filepath)
             player_state['position'] = 0
             player_state['is_playing'] = False
+            player_state['fps'] = 0
+            player_state['speed'] = '0x'
+            
+            # Notify clients of state change
+            update_player_state()
             
             logger.info(f"File uploaded successfully: {filename}")
             return jsonify({
+                'status': 'success',
                 'message': 'File uploaded successfully',
-                'filename': filename,
-                'is_video': is_video_file(filename)
+                'filename': filename
             })
-        except Exception as e:
-            logger.error(f"Error uploading file: {e}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/play', methods=['POST'])
 def play():

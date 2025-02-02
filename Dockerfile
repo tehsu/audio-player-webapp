@@ -1,20 +1,5 @@
 FROM python:3.11-slim
 
-# # Install requests and bs4 for URL generation script
-# RUN pip install requests beautifulsoup4
-
-# # Add Blackmagic repository
-# COPY scripts /tmp/scripts
-# RUN chmod +x /tmp/scripts/get_blackmagic_url.py
-
-# # Download and install Blackmagic Desktop Video
-# RUN cd /tmp \
-#             && wget --progress=dot:giga -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
-#                 "https://www.blackmagicdesign.com/support/download/5baba0af3eda41ee9cd0ec7349660d74/Linux" \
-#     && tar xf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
-#     && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
-#     && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /tmp/scripts
-
 # Enable non-free repository
 RUN echo "deb http://deb.debian.org/debian bookworm contrib non-free" >> /etc/apt/sources.list
 
@@ -53,10 +38,9 @@ RUN git clone https://github.com/FDH2/UxPlay.git && \
     cd ../.. && \
     rm -rf UxPlay
 
-# Install VLC and other dependencies
+# Install FFmpeg and other dependencies
 RUN apt-get update && apt-get install -y \
-    vlc \
-    libvlc-dev \
+    ffmpeg \
     pulseaudio \
     pulseaudio-utils \
     mesa-va-drivers \
@@ -67,7 +51,6 @@ RUN apt-get update && apt-get install -y \
     x11vnc \
     xauth \
     imagemagick \
-    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

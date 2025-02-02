@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_socketio import SocketIO, emit
-import vlc
 import os
 import threading
 import time
@@ -11,6 +10,8 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 import subprocess
 import cv2
+import json
+import signal
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
@@ -21,8 +22,8 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-player = None
-decklink_player = None
+ffmpeg_process = None
+decklink_process = None
 airplay_capture = None
 current_media = None
 decklink_media = None
@@ -36,75 +37,102 @@ player_state = {
     'airplay_active': False
 }
 
-# VLC instance options for virtual display
-vlc_options = [
-    '--no-xlib',  # Disable X11 video output
-    '--vout=dummy',  # Use dummy video output
-    '--aout=pulse',  # Use PulseAudio for audio output
-    '--quiet',  # Reduce VLC's output
-    '--no-video-title-show',  # Don't show the title
-    '--no-snapshot-preview',  # Disable snapshot previews
-]
-
-# VLC instance options for Blackmagic output
-decklink_options = [
-    '--decklink-output-device=0',  # Use first Decklink device
-    '--decklink-mode=1080p60',  # Set output mode to 1080p60
-    '--decklink-audio-output=2',  # 2 channel audio output
-    '--no-audio',  # Disable audio for Decklink output
-    '--quiet',
-    '--no-video-title-show'
-]
-
 # Create uploads directory if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
-def init_player():
-    global player
-    if player is None:
-        logger.info("Initializing new VLC player instance")
-        try:
-            # Initialize VLC with virtual display options
-            instance = vlc.Instance(' '.join(vlc_options))
-            player = instance.media_player_new()
-            # Enable hardware decoding
-            player.set_hwdecoding(True)
-            logger.debug("VLC player initialized with virtual display and hardware decoding")
-        except Exception as e:
-            logger.error(f"Error initializing VLC player: {e}", exc_info=True)
-            raise
-    else:
-        logger.debug("Using existing VLC player instance")
-
-def init_decklink_player():
-    global decklink_player
-    if decklink_player is None:
-        logger.info("Initializing new VLC player instance for Blackmagic output")
-        try:
-            # Initialize VLC with Decklink options
-            instance = vlc.Instance(' '.join(decklink_options))
-            decklink_player = instance.media_player_new()
-            logger.debug("VLC player initialized with Blackmagic output")
-        except Exception as e:
-            logger.error(f"Error initializing Decklink player: {e}", exc_info=True)
-            raise
-    else:
-        logger.debug("Using existing Decklink player instance")
-
-def init_airplay_capture():
-    """Initialize video capture from UxPlay v4l2loopback device"""
-    global airplay_capture
+def get_video_duration(filepath):
+    """Get video duration using FFprobe"""
+    cmd = [
+        'ffprobe', 
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'json',
+        filepath
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     try:
-        airplay_capture = cv2.VideoCapture('/dev/video0')
-        airplay_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
-        airplay_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
-        airplay_capture.set(cv2.CAP_PROP_FPS, 60)
-        logger.info("Initialized AirPlay video capture")
-        return True
-    except Exception as e:
-        logger.error(f"Error initializing AirPlay capture: {e}")
-        return False
+        data = json.loads(result.stdout)
+        return float(data['format']['duration'])
+    except:
+        return 0
+
+def play_media(filepath, seek_position=0):
+    """Play media file using FFmpeg"""
+    global ffmpeg_process, player_state
+    
+    if ffmpeg_process:
+        ffmpeg_process.terminate()
+        ffmpeg_process.wait()
+        
+    volume = player_state['volume'] / 100.0
+    
+    cmd = [
+        'ffmpeg',
+        '-re',  # Read input at native framerate
+        '-ss', str(seek_position),  # Seek position
+        '-i', filepath,  # Input file
+        '-vf', 'format=yuv420p',  # Video format
+        '-f', 'matroska',  # Output format
+        '-c:v', 'h264',  # Video codec
+        '-c:a', 'aac',  # Audio codec
+        '-af', f'volume={volume}',  # Volume control
+        'pipe:1'  # Output to pipe
+    ]
+    
+    if player_state['decklink_active']:
+        cmd = [
+            'ffmpeg',
+            '-re',
+            '-ss', str(seek_position),
+            '-i', filepath,
+            '-vf', 'format=uyvy422',
+            '-f', 'decklink',
+            '-c:v', 'rawvideo',
+            '-c:a', 'pcm_s16le',
+            '-af', f'volume={volume}',
+            'DeckLink Output'
+        ]
+    
+    ffmpeg_process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE if not player_state['decklink_active'] else None,
+        stderr=subprocess.PIPE
+    )
+    
+    player_state['is_playing'] = True
+    player_state['position'] = seek_position
+    update_player_state()
+
+def stop_playback():
+    """Stop media playback"""
+    global ffmpeg_process, player_state
+    if ffmpeg_process:
+        ffmpeg_process.terminate()
+        ffmpeg_process.wait()
+        ffmpeg_process = None
+    player_state['is_playing'] = False
+    player_state['position'] = 0
+    update_player_state()
+
+def set_volume(volume):
+    """Set playback volume"""
+    global player_state
+    player_state['volume'] = max(0, min(100, volume))
+    if player_state['is_playing'] and current_media:
+        play_media(current_media, player_state['position'])
+
+def seek(position):
+    """Seek to position in media"""
+    global player_state
+    if current_media:
+        player_state['position'] = position
+        play_media(current_media, position)
+
+def update_player_state():
+    """Update and broadcast player state to all clients"""
+    global player_state
+    socketio.emit('player_state_update', player_state)
 
 def is_video_file(filename):
     """Check if the file is a video based on its extension"""
@@ -166,54 +194,77 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(func=cleanup_old_files, trigger="interval", hours=1)
 scheduler.start()
 
-def update_player_state():
-    """Update and broadcast player state to all clients"""
-    global player, player_state
-    if player and current_media:
-        player_state['position'] = player.get_time()
-        player_state['duration'] = player.get_length()
-        player_state['is_playing'] = player.is_playing()
-        player_state['volume'] = player.audio_get_volume()
-        socketio.emit('player_state_update', player_state)
-
-@socketio.on('connect')
-def handle_connect():
-    """Handle client connection"""
-    logger.info("Client connected")
-    emit('player_state_update', player_state)
-
-@socketio.on('seek')
-def handle_seek(data):
-    """Handle seek request"""
+def init_airplay_capture():
+    """Initialize video capture from UxPlay v4l2loopback device"""
+    global airplay_capture
     try:
-        if player and current_media:
-            position = int(data['position'])
-            player.set_time(position)
-            update_player_state()
+        airplay_capture = cv2.VideoCapture('/dev/video0')
+        airplay_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 3840)
+        airplay_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 2160)
+        airplay_capture.set(cv2.CAP_PROP_FPS, 60)
+        logger.info("Initialized AirPlay video capture")
+        return True
     except Exception as e:
-        logger.error(f"Error handling seek: {e}")
+        logger.error(f"Error initializing AirPlay capture: {e}")
+        return False
 
-@socketio.on('set_volume')
-def handle_volume(data):
-    """Handle volume change request"""
+def start_airplay_capture():
+    """Start capturing from UxPlay and output to Blackmagic"""
     try:
-        if player:
-            volume = int(data['volume'])
-            player.audio_set_volume(volume)
-            update_player_state()
-    except Exception as e:
-        logger.error(f"Error handling volume change: {e}")
+        if not init_airplay_capture():
+            return False
 
-def start_state_update_thread():
-    """Start thread to periodically update player state"""
-    def update_loop():
-        while True:
-            if player and current_media:
-                update_player_state()
-            time.sleep(0.1)  # Update every 100ms
-    
-    thread = threading.Thread(target=update_loop, daemon=True)
-    thread.start()
+        # Create a media instance for the v4l2loopback device
+        cmd = [
+            'ffmpeg',
+            '-re',
+            '-f', 'v4l2',
+            '-framerate', '60',
+            '-video_size', '3840x2160',
+            '-i', '/dev/video0',
+            '-vf', 'format=uyvy422',
+            '-f', 'decklink',
+            '-c:v', 'rawvideo',
+            '-c:a', 'pcm_s16le',
+            'DeckLink Output'
+        ]
+        
+        global decklink_process
+        decklink_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        player_state['decklink_active'] = True
+        player_state['airplay_active'] = True
+        
+        logger.info("Started AirPlay capture and Blackmagic output")
+        return True
+    except Exception as e:
+        logger.error(f"Error starting AirPlay capture: {e}")
+        return False
+
+def stop_airplay_capture():
+    """Stop AirPlay capture and Blackmagic output"""
+    try:
+        global airplay_capture, decklink_process
+        if airplay_capture:
+            airplay_capture.release()
+            airplay_capture = None
+        
+        if decklink_process:
+            decklink_process.terminate()
+            decklink_process.wait()
+        
+        player_state['decklink_active'] = False
+        player_state['airplay_active'] = False
+        
+        logger.info("Stopped AirPlay capture and Blackmagic output")
+        return True
+    except Exception as e:
+        logger.error(f"Error stopping AirPlay capture: {e}")
+        return False
 
 @app.route('/')
 def index():
@@ -251,24 +302,10 @@ def select_file():
             logger.error(f"File not found: {filepath}")
             return jsonify({'error': 'File not found'}), 404
 
-        init_player()
-        
-        # Create a new media instance
-        logger.debug("Creating new VLC media instance")
-        instance = vlc.Instance(' '.join(vlc_options))
         global current_media, player_state
-        current_media = instance.media_new(filepath)
-        
-        # Enable hardware decoding for video files
-        if is_video_file(filename):
-            logger.debug("Enabling hardware decoding for video file")
-            current_media.add_option('avcodec-hw=any')
-        
-        logger.debug("Setting media in player")
-        player.set_media(current_media)
-        
-        # Update player state
+        current_media = filepath
         player_state['current_file'] = filename
+        player_state['duration'] = get_video_duration(filepath)
         player_state['position'] = 0
         player_state['is_playing'] = False
         
@@ -310,21 +347,12 @@ def upload_file():
                         break
                     f.write(chunk)
             
-            init_player()
-            
-            # Create a new media instance
-            logger.debug("Creating new VLC media instance")
-            instance = vlc.Instance(' '.join(vlc_options))
-            global current_media
-            current_media = instance.media_new(filepath)
-            
-            # Enable hardware decoding for video files
-            if is_video_file(filename):
-                logger.debug("Enabling hardware decoding for video file")
-                current_media.add_option('avcodec-hw=any')
-            
-            logger.debug("Setting media in player")
-            player.set_media(current_media)
+            global current_media, player_state
+            current_media = filepath
+            player_state['current_file'] = filename
+            player_state['duration'] = get_video_duration(filepath)
+            player_state['position'] = 0
+            player_state['is_playing'] = False
             
             logger.info(f"File uploaded successfully: {filename}")
             return jsonify({
@@ -338,34 +366,24 @@ def upload_file():
 
 @app.route('/play', methods=['POST'])
 def play():
-    if not current_media:
-        logger.error("No media loaded")
-        return jsonify({'error': 'No media loaded'}), 400
-    
-    logger.info("Starting playback")
-    player.play()
-    update_player_state()
-    return jsonify({'message': 'Started playback'})
+    global current_media, player_state
+    if current_media:
+        play_media(current_media, player_state['position'])
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error', 'message': 'No media selected'})
 
 @app.route('/pause', methods=['POST'])
 def pause():
-    if player:
-        logger.info("Pausing playback")
-        player.pause()
-        update_player_state()
-        return jsonify({'message': 'Media paused'})
-    logger.error("No media playing")
-    return jsonify({'error': 'No media playing'}), 400
+    global player_state
+    stop_playback()
+    return jsonify({'status': 'success'})
 
 @app.route('/stop', methods=['POST'])
 def stop():
-    if player:
-        logger.info("Stopping playback")
-        player.stop()
-        update_player_state()
-        return jsonify({'message': 'Stopped media'})
-    logger.error("No media playing")
-    return jsonify({'error': 'No media playing'}), 400
+    global player_state, current_media
+    stop_playback()
+    current_media = None
+    return jsonify({'status': 'success'})
 
 @app.route('/output_to_decklink', methods=['POST'])
 def output_to_decklink():
@@ -381,8 +399,6 @@ def output_to_decklink():
         if not os.path.exists(filepath):
             return jsonify({'error': 'File not found'}), 404
 
-        init_decklink_player()
-
         # Handle different file types
         if is_image_file(filename):
             logger.info(f"Converting image to video for Blackmagic output: {filename}")
@@ -392,13 +408,24 @@ def output_to_decklink():
             filepath = video_path
 
         # Create media for Decklink output
-        instance = vlc.Instance(' '.join(decklink_options))
-        global decklink_media
-        decklink_media = instance.media_new(filepath)
-        decklink_player.set_media(decklink_media)
+        cmd = [
+            'ffmpeg',
+            '-re',
+            '-i', filepath,
+            '-vf', 'format=uyvy422',
+            '-f', 'decklink',
+            '-c:v', 'rawvideo',
+            '-c:a', 'pcm_s16le',
+            'DeckLink Output'
+        ]
         
-        # Start playback
-        decklink_player.play()
+        global decklink_process
+        decklink_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
         player_state['decklink_active'] = True
         
         return jsonify({
@@ -413,11 +440,13 @@ def output_to_decklink():
 def stop_decklink():
     """Stop Blackmagic output"""
     try:
-        if decklink_player:
-            decklink_player.stop()
-            player_state['decklink_active'] = False
-            return jsonify({'message': 'Stopped Blackmagic output'})
-        return jsonify({'error': 'No Blackmagic output active'}), 400
+        global decklink_process
+        if decklink_process:
+            decklink_process.terminate()
+            decklink_process.wait()
+            decklink_process = None
+        player_state['decklink_active'] = False
+        return jsonify({'message': 'Stopped Blackmagic output'})
     except Exception as e:
         logger.error(f"Error stopping Blackmagic output: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
@@ -444,55 +473,25 @@ def stop_airplay():
         logger.error(f"Error in stop_airplay route: {e}")
         return jsonify({'error': str(e)}), 500
 
-def start_airplay_capture():
-    """Start capturing from UxPlay and output to Blackmagic"""
-    try:
-        if not init_airplay_capture():
-            return False
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    logger.info("Client connected")
+    emit('player_state_update', player_state)
 
-        init_decklink_player()
-        
-        # Create a media instance for the v4l2loopback device
-        instance = vlc.Instance(' '.join(decklink_options))
-        global decklink_media
-        decklink_media = instance.media_new("v4l2:///dev/video0")
-        decklink_player.set_media(decklink_media)
-        
-        # Start playback
-        decklink_player.play()
-        player_state['decklink_active'] = True
-        player_state['airplay_active'] = True
-        
-        logger.info("Started AirPlay capture and Blackmagic output")
-        return True
-    except Exception as e:
-        logger.error(f"Error starting AirPlay capture: {e}")
-        return False
+@socketio.on('seek')
+def handle_seek(data):
+    position = data.get('position', 0)
+    seek(position)
 
-def stop_airplay_capture():
-    """Stop AirPlay capture and Blackmagic output"""
-    try:
-        global airplay_capture
-        if airplay_capture:
-            airplay_capture.release()
-            airplay_capture = None
-        
-        if decklink_player:
-            decklink_player.stop()
-        
-        player_state['decklink_active'] = False
-        player_state['airplay_active'] = False
-        
-        logger.info("Stopped AirPlay capture and Blackmagic output")
-        return True
-    except Exception as e:
-        logger.error(f"Error stopping AirPlay capture: {e}")
-        return False
+@socketio.on('volume')
+def handle_volume(data):
+    volume = data.get('volume', 100)
+    set_volume(volume)
 
 if __name__ == '__main__':
     try:
         logger.info("Starting Flask application")
-        start_state_update_thread()
         socketio.run(app, host='0.0.0.0', port=5000)
     finally:
         logger.info("Shutting down scheduler")

@@ -15,6 +15,9 @@ FROM python:3.11-slim
 #     && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
 #     && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /tmp/scripts
 
+# Enable non-free repository
+RUN echo "deb http://deb.debian.org/debian bookworm contrib non-free" >> /etc/apt/sources.list
+
 # Install build dependencies for UxPlay
 RUN apt-get update && apt-get install -y \
     git \

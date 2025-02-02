@@ -11,6 +11,7 @@ services:
       - ${HOME}/.config/pulse/cookie:/root/.config/pulse/cookie  # PulseAudio cookie
       - /tmp/.X11-unix:/tmp/.X11-unix  # X11 socket
       - /run/user/1000:/run/user/1000  # XDG runtime directory
+      - /dev/blackmagic:/dev/blackmagic  # Blackmagic device access
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
@@ -19,11 +20,14 @@ services:
       - DISPLAY=:99
       - PYTHONUNBUFFERED=1  # Enable real-time Python logging
       - XDG_RUNTIME_DIR=/run/user/1000  # Set XDG runtime directory
+      - DECKLINK_DEVICE=0  # Default Decklink device number
     devices:
       - /dev/dri  # GPU device
+      - /dev/blackmagic  # Blackmagic device
     group_add:
       - audio
       - video  # Required for GPU access
+    privileged: true  # Required for Blackmagic device access
     restart: unless-stopped
     tmpfs:
       - /tmp  # RAM-based temporary storage for X11

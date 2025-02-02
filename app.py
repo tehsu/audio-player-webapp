@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from werkzeug.utils import secure_filename
+from PIL import Image
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
@@ -19,13 +21,16 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 player = None
+decklink_player = None  # Separate player for Blackmagic output
 current_media = None
+decklink_media = None
 player_state = {
     'current_file': None,
     'duration': 0,
     'position': 0,
     'is_playing': False,
-    'volume': 100
+    'volume': 100,
+    'decklink_active': False
 }
 
 # VLC instance options for virtual display
@@ -36,6 +41,16 @@ vlc_options = [
     '--quiet',  # Reduce VLC's output
     '--no-video-title-show',  # Don't show the title
     '--no-snapshot-preview',  # Disable snapshot previews
+]
+
+# VLC instance options for Blackmagic output
+decklink_options = [
+    '--decklink-output-device=0',  # Use first Decklink device
+    '--decklink-mode=1080p60',  # Set output mode to 1080p60
+    '--decklink-audio-output=2',  # 2 channel audio output
+    '--no-audio',  # Disable audio for Decklink output
+    '--quiet',
+    '--no-video-title-show'
 ]
 
 # Create uploads directory if it doesn't exist
@@ -59,10 +74,51 @@ def init_player():
     else:
         logger.debug("Using existing VLC player instance")
 
+def init_decklink_player():
+    global decklink_player
+    if decklink_player is None:
+        logger.info("Initializing new VLC player instance for Blackmagic output")
+        try:
+            # Initialize VLC with Decklink options
+            instance = vlc.Instance(' '.join(decklink_options))
+            decklink_player = instance.media_player_new()
+            logger.debug("VLC player initialized with Blackmagic output")
+        except Exception as e:
+            logger.error(f"Error initializing Decklink player: {e}", exc_info=True)
+            raise
+    else:
+        logger.debug("Using existing Decklink player instance")
+
 def is_video_file(filename):
     """Check if the file is a video based on its extension"""
     video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
     return any(filename.lower().endswith(ext) for ext in video_extensions)
+
+def is_image_file(filename):
+    """Check if the file is an image based on its extension"""
+    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
+    return any(filename.lower().endswith(ext) for ext in image_extensions)
+
+def convert_image_to_video(image_path):
+    """Convert a static image to a video file for Blackmagic output"""
+    output_path = image_path + '.mp4'
+    try:
+        # Create a 10-second video from the image
+        cmd = [
+            'ffmpeg', '-y',
+            '-loop', '1',
+            '-i', image_path,
+            '-c:v', 'libx264',
+            '-t', '10',
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+            output_path
+        ]
+        subprocess.run(cmd, check=True)
+        return output_path
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error converting image to video: {e}")
+        return None
 
 def get_file_info(filename):
     """Get information about a file"""
@@ -71,7 +127,8 @@ def get_file_info(filename):
         'name': filename,
         'size': os.path.getsize(filepath),
         'modified': datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat(),
-        'is_video': is_video_file(filename)
+        'is_video': is_video_file(filename),
+        'is_image': is_image_file(filename)
     }
 
 def cleanup_old_files():
@@ -292,6 +349,61 @@ def stop():
         return jsonify({'message': 'Stopped media'})
     logger.error("No media playing")
     return jsonify({'error': 'No media playing'}), 400
+
+@app.route('/output_to_decklink', methods=['POST'])
+def output_to_decklink():
+    """Output current media to Blackmagic device"""
+    try:
+        data = request.get_json()
+        if not data or 'filename' not in data:
+            return jsonify({'error': 'No filename provided'}), 400
+
+        filename = data['filename']
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'File not found'}), 404
+
+        init_decklink_player()
+
+        # Handle different file types
+        if is_image_file(filename):
+            logger.info(f"Converting image to video for Blackmagic output: {filename}")
+            video_path = convert_image_to_video(filepath)
+            if not video_path:
+                return jsonify({'error': 'Failed to convert image'}), 500
+            filepath = video_path
+
+        # Create media for Decklink output
+        instance = vlc.Instance(' '.join(decklink_options))
+        global decklink_media
+        decklink_media = instance.media_new(filepath)
+        decklink_player.set_media(decklink_media)
+        
+        # Start playback
+        decklink_player.play()
+        player_state['decklink_active'] = True
+        
+        return jsonify({
+            'message': 'Started Blackmagic output',
+            'filename': filename
+        })
+    except Exception as e:
+        logger.error(f"Error starting Blackmagic output: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/stop_decklink', methods=['POST'])
+def stop_decklink():
+    """Stop Blackmagic output"""
+    try:
+        if decklink_player:
+            decklink_player.stop()
+            player_state['decklink_active'] = False
+            return jsonify({'message': 'Stopped Blackmagic output'})
+        return jsonify({'error': 'No Blackmagic output active'}), 400
+    except Exception as e:
+        logger.error(f"Error stopping Blackmagic output: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     try:

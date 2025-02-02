@@ -192,11 +192,13 @@
     <div class="container">
         <h1>CFK Media Player</h1>
         <input type="file" id="mediaFile" accept=".mp3,.wav,.ogg,.m4a,.mp4,.mov,.avi,.mkv,.webm">
-        <div class="controls">
+        <div class="control-buttons">
             <button id="uploadBtn">Upload</button>
             <button id="playBtn" disabled>Play</button>
             <button id="pauseBtn" disabled>Pause</button>
             <button id="stopBtn" disabled>Stop</button>
+            <button id="deckLinkBtn" disabled>Output to Blackmagic</button>
+            <button id="stopDeckLinkBtn" disabled>Stop Blackmagic</button>
         </div>
         <div class="progress-container" style="display: none;">
             <div class="progress-bar">
@@ -230,6 +232,8 @@
         const playBtn = document.getElementById('playBtn');
         const pauseBtn = document.getElementById('pauseBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const deckLinkBtn = document.getElementById('deckLinkBtn');
+        const stopDeckLinkBtn = document.getElementById('stopDeckLinkBtn');
         const mediaFile = document.getElementById('mediaFile');
         const status = document.getElementById('status');
         const mediaInfo = document.getElementById('mediaInfo');
@@ -277,7 +281,7 @@
                         </div>
                     `;
                     
-                    fileItem.addEventListener('click', async () => {
+                    fileItem.addEventListener('click', async (event) => {
                         try {
                             console.log(`Selecting file: ${file.name}`);
                             const response = await fetch('/select_file', {
@@ -296,11 +300,12 @@
                                 playBtn.disabled = false;
                                 pauseBtn.disabled = true;
                                 stopBtn.disabled = false;
+                                deckLinkBtn.disabled = false;
                                 
                                 document.querySelectorAll('.file-item').forEach(item => {
                                     item.classList.remove('selected');
                                 });
-                                fileItem.classList.add('selected');
+                                event.currentTarget.classList.add('selected');
                                 
                                 mediaInfo.style.display = 'block';
                                 mediaInfo.textContent = `Type: ${data.is_video ? 'Video' : 'Audio'} - File: ${data.filename}`;
@@ -368,6 +373,7 @@
                     playBtn.disabled = false;
                     pauseBtn.disabled = true;
                     stopBtn.disabled = false;
+                    deckLinkBtn.disabled = false;
                     uploadBtn.disabled = false;
                     
                     mediaInfo.style.display = 'block';
@@ -437,6 +443,50 @@
             }
         });
 
+        deckLinkBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/output_to_decklink', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: player_state.current_file })
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showStatus(data.message);
+                    deckLinkBtn.disabled = true;
+                    stopDeckLinkBtn.disabled = false;
+                } else {
+                    showStatus(data.error, true);
+                }
+            } catch (error) {
+                console.error('Error starting Blackmagic output:', error);
+                showStatus('Error starting Blackmagic output', true);
+            }
+        });
+        
+        stopDeckLinkBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/stop_decklink', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (response.ok) {
+                    showStatus(data.message);
+                    deckLinkBtn.disabled = false;
+                    stopDeckLinkBtn.disabled = true;
+                } else {
+                    showStatus(data.error, true);
+                }
+            } catch (error) {
+                console.error('Error stopping Blackmagic output:', error);
+                showStatus('Error stopping Blackmagic output', true);
+            }
+        });
+
         // Initialize Socket.IO
         const socket = io();
         let seeking = false;
@@ -447,6 +497,10 @@
                 updateProgressBar(state.position, state.duration);
                 updatePlaybackState(state.is_playing);
                 updateVolumeDisplay(state.volume);
+                
+                // Update Blackmagic buttons
+                deckLinkBtn.disabled = !state.current_file || state.decklink_active;
+                stopDeckLinkBtn.disabled = !state.decklink_active;
             }
         });
         

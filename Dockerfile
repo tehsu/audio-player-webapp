@@ -1,5 +1,14 @@
 FROM python:3.11-slim
 
+# Add Blackmagic repository
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    && wget https://sw.blackmagicdesign.com/DesktopVideo/v12.4/Blackmagic_Desktop_Video_Linux_12.4.tar.gz \
+    && tar xvf Blackmagic_Desktop_Video_Linux_12.4.tar.gz \
+    && dpkg -i Blackmagic_Desktop_Video_Linux_12.4/deb/x86_64/desktopvideo_12.4_amd64.deb \
+    && rm -rf Blackmagic_Desktop_Video_Linux_12.4*
+
 # Install VLC and dependencies
 RUN apt-get update && apt-get install -y \
     vlc \
@@ -13,6 +22,8 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     x11vnc \
     xauth \
+    imagemagick \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

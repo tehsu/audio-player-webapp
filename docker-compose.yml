@@ -9,11 +9,16 @@ services:
       - .:/app
       - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0  # PipeWire socket
       - ${XDG_RUNTIME_DIR}/pipewire:/run/pipewire  # PipeWire runtime
+      - /dev/blackmagic:/dev/blackmagic  # Blackmagic device
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
       - XDG_RUNTIME_DIR=/run/user/1000
       - PIPEWIRE_RUNTIME_DIR=/run/pipewire
+    devices:
+      - /dev/blackmagic
     restart: unless-stopped
     group_add:
       - audio
+      - video
+    privileged: true  # Required for Blackmagic hardware access

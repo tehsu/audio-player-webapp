@@ -1,16 +1,22 @@
-import os
-from flask import Flask, request, render_template, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, render_template
 import vlc
+import os
 import threading
 import time
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from werkzeug.utils import secure_filename
+import cv2
+import numpy as np
+import av
+import subprocess
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 player = None
 current_media = None
+video_thread = None
+stop_video = False
 
 # Create uploads directory if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -21,6 +27,44 @@ def init_player():
     if player is None:
         instance = vlc.Instance()
         player = instance.media_player_new()
+
+def is_video_file(filename):
+    video_extensions = {'.mp4', '.mov', '.avi', '.mkv'}
+    return any(filename.lower().endswith(ext) for ext in video_extensions)
+
+def play_video_blackmagic(filepath):
+    global stop_video
+    stop_video = False
+    
+    try:
+        # Open video file using PyAV
+        container = av.open(filepath)
+        video = container.streams.video[0]
+        
+        # Set up Blackmagic output using decklink
+        command = [
+            'ffmpeg',
+            '-re',  # Read input at native frame rate
+            '-i', filepath,
+            '-f', 'decklink',
+            '-pix_fmt', 'uyvy422',
+            'DeckLink Output'
+        ]
+        
+        process = subprocess.Popen(command)
+        
+        while not stop_video:
+            if process.poll() is not None:  # Process has ended
+                break
+            time.sleep(0.1)
+        
+        process.terminate()
+        process.wait()
+        
+    except Exception as e:
+        print(f"Error playing video: {str(e)}")
+    finally:
+        container.close()
 
 def cleanup_old_files():
     """Remove files older than 24 hours from the uploads directory"""
@@ -50,6 +94,8 @@ def upload_file():
         return jsonify({'error': 'No file part'}), 400
     
     file = request.files['file']
+    output_device = request.form.get('output_device', 'default')
+    
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
@@ -77,37 +123,57 @@ def upload_file():
             
             return jsonify({
                 'message': 'File uploaded successfully',
-                'filename': filename
+                'filename': filename,
+                'is_video': is_video_file(filename),
+                'output_device': output_device
             })
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
 @app.route('/play', methods=['POST'])
 def play():
-    if player is None or current_media is None:
-        return jsonify({'error': 'No audio loaded'}), 400
+    global video_thread, stop_video
     
-    player.play()
-    return jsonify({'message': 'Playing audio'})
+    if not current_media:
+        return jsonify({'error': 'No media loaded'}), 400
+    
+    filepath = current_media.get_mrl().replace('file://', '')
+    output_device = request.form.get('output_device', 'default')
+    
+    if is_video_file(filepath) and output_device == 'blackmagic':
+        stop_video = True  # Stop any existing video playback
+        if video_thread and video_thread.is_alive():
+            video_thread.join()
+        
+        video_thread = threading.Thread(target=play_video_blackmagic, args=(filepath,))
+        video_thread.start()
+        return jsonify({'message': 'Started video playback on Blackmagic'})
+    else:
+        player.play()
+        return jsonify({'message': 'Started playback'})
 
 @app.route('/pause', methods=['POST'])
 def pause():
     if player:
         player.pause()
-        return jsonify({'message': 'Audio paused'})
-    return jsonify({'error': 'No audio playing'}), 400
+        return jsonify({'message': 'Media paused'})
+    return jsonify({'error': 'No media playing'}), 400
 
 @app.route('/stop', methods=['POST'])
 def stop():
-    if player is None:
-        return jsonify({'error': 'No audio loaded'}), 400
+    global stop_video
     
-    player.stop()
-    return jsonify({'message': 'Stopped audio'})
+    if is_video_file(current_media.get_mrl()) and video_thread and video_thread.is_alive():
+        stop_video = True
+        video_thread.join()
+        return jsonify({'message': 'Stopped video'})
+    elif player:
+        player.stop()
+        return jsonify({'message': 'Stopped media'})
+    return jsonify({'error': 'No media playing'}), 400
 
 if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=5000)
     finally:
-        # Shut down the scheduler when the app is closing
         scheduler.shutdown()

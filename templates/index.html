@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Audio Player</title>
+    <title>CFK Audio/Video Player</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -74,12 +74,31 @@
             font-size: 14px;
             color: #666;
         }
+        .file-input {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .select-device {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            width: 200px;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>CFK Audio Player</h1>
-        <input type="file" id="audioFile" accept=".mp3,.wav,.ogg,.m4a">
+        <h1>CFK Audio/Video Player</h1>
+        <div class="file-input">
+            <select id="outputDevice" class="select-device">
+                <option value="default">System Output</option>
+                <option value="blackmagic">Blackmagic Monitor</option>
+            </select>
+            <input type="file" id="mediaFile" accept=".mp3,.wav,.ogg,.m4a,.mp4,.mov,.avi,.mkv">
+        </div>
         <div class="controls">
             <button id="uploadBtn">Upload</button>
             <button id="playBtn" disabled>Play</button>
@@ -100,7 +119,8 @@
         const playBtn = document.getElementById('playBtn');
         const pauseBtn = document.getElementById('pauseBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const audioFile = document.getElementById('audioFile');
+        const mediaFile = document.getElementById('mediaFile');
+        const outputDevice = document.getElementById('outputDevice');
         const status = document.getElementById('status');
 
         function showStatus(message, isError = false) {
@@ -109,7 +129,7 @@
         }
 
         uploadBtn.addEventListener('click', function() {
-            const file = audioFile.files[0];
+            const file = mediaFile.files[0];
             if (!file) {
                 showStatus('Please select a file first', true);
                 return;
@@ -117,6 +137,7 @@
 
             const formData = new FormData();
             formData.append('file', file);
+            formData.append('output_device', outputDevice.value);
 
             const progressContainer = document.querySelector('.progress-container');
             const progressBar = document.getElementById('uploadProgress');
@@ -144,8 +165,7 @@
                     pauseBtn.disabled = false;
                     stopBtn.disabled = false;
                     uploadBtn.disabled = false;
-                    
-                    // Hide progress after a short delay
+
                     setTimeout(() => {
                         progressContainer.style.display = 'none';
                         progressBar.style.width = '0%';

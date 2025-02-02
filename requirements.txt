@@ -1,3 +1,6 @@
 Flask==2.3.3
 python-vlc==3.0.18122
 APScheduler==3.10.1
+opencv-python-headless==4.8.0.74
+numpy==1.24.3
+PyAV==10.0.0

@@ -1,19 +1,20 @@
 FROM python:3.11-slim
 
-# Add Blackmagic repository
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    python3-requests \
-    && mkdir -p /scripts
+# Install requests for URL generation script
+RUN pip install requests
 
-COPY scripts/get_blackmagic_url.py /scripts/
-RUN chmod +x /scripts/get_blackmagic_url.py \
-    && DOWNLOAD_URL=$(/scripts/get_blackmagic_url.py) \
-    && wget "$DOWNLOAD_URL" -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
-    && tar xvf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
+# Add Blackmagic repository
+COPY scripts /tmp/scripts
+RUN chmod +x /tmp/scripts/get_blackmagic_url.py
+
+# Download and install Blackmagic Desktop Video
+RUN cd /tmp \
+    && DOWNLOAD_URL=$(/tmp/scripts/get_blackmagic_url.py) \
+    && echo "Download URL: $DOWNLOAD_URL" \
+    && wget --progress=dot:giga -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz "$DOWNLOAD_URL" \
+    && tar xf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
     && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
-    && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /scripts/get_blackmagic_url.py
+    && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /tmp/scripts
 
 # Install build dependencies for UxPlay
 RUN apt-get update && apt-get install -y \
@@ -31,6 +32,8 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-libav \
     libplist-dev \
     libfdk-aac-dev \
+    wget \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 # Build and install UxPlay

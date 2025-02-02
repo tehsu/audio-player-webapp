@@ -19,12 +19,9 @@ export DISPLAY=:99
 # Start PulseAudio in daemon mode
 pulseaudio --start --log-target=syslog
 
-# Start UxPlay with output to both virtual display and v4l2loopback
-uxplay --screen $DISPLAY --v4l2 /dev/video0 --fps 60 --width 3840 --height 2160 --pixfmt nv12 &
+# Start UxPlay with correct options
+uxplay -s 3840x2160 -v4l2 -p 7000 -fs &
 
-echo "Virtual display initialized at 4K resolution (3840x2160)"
-echo "UxPlay started and ready for AirPlay connections"
+# Start Flask app
 echo "Starting Flask app..."
-
-# Start the Flask application
 exec python app.py

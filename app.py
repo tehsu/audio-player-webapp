@@ -78,6 +78,14 @@ def monitor_ffmpeg_progress(process):
         
         socketio.emit('player_state_update', player_state)
         time.sleep(0.1)  # Don't update too frequently
+    
+    # Process has ended
+    if process.poll() is not None:
+        player_state['is_playing'] = False
+        player_state['position'] = 0
+        player_state['fps'] = 0
+        player_state['speed'] = '0x'
+        update_player_state()
 
 def play_media(filepath, seek_position=0):
     """Play media file using FFmpeg"""
@@ -86,68 +94,82 @@ def play_media(filepath, seek_position=0):
     # Stop any existing playback
     stop_playback()
     
-    cmd = [
-        'ffmpeg',
-        '-re',  # Read input at native framerate
-        '-ss', str(seek_position),  # Seek position
-        '-i', filepath,  # Input file
-        '-vf', 'format=yuv420p',  # Video format
-        '-f', 'matroska',  # Output format
-        '-c:v', 'h264',  # Video codec
-        '-c:a', 'aac',  # Audio codec
-        '-progress', 'pipe:2',  # Output progress to stderr
-        'pipe:1'  # Output to pipe
-    ]
-    
-    ffmpeg_process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
-        bufsize=1
-    )
-    
-    # Start progress monitoring thread
-    progress_thread = threading.Thread(
-        target=monitor_ffmpeg_progress,
-        args=(ffmpeg_process,),
-        daemon=True
-    )
-    progress_thread.start()
-    
-    player_state['is_playing'] = True
-    player_state['position'] = seek_position
-    update_player_state()
+    try:
+        # Start FFmpeg process with video output to SDL window
+        cmd = [
+            'ffplay',  # Use ffplay instead of ffmpeg
+            '-i', filepath,  # Input file
+            '-ss', str(seek_position),  # Seek position
+            '-x', '800',  # Window width
+            '-y', '600',  # Window height
+            '-window_title', 'Media Player',  # Window title
+            '-stats',  # Show stats
+            '-vf', 'format=yuv420p',  # Video format
+            '-sync', 'audio',  # Sync to audio
+            '-noborder'  # No window border
+        ]
+        
+        # Start the process
+        ffmpeg_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            bufsize=1
+        )
+        
+        # Start progress monitoring thread
+        progress_thread = threading.Thread(
+            target=monitor_ffmpeg_progress,
+            args=(ffmpeg_process,),
+            daemon=True
+        )
+        progress_thread.start()
+        
+        player_state['is_playing'] = True
+        player_state['position'] = seek_position
+        update_player_state()
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error starting playback: {e}")
+        return False
 
 def stop_playback():
     """Stop media playback"""
     global ffmpeg_process, player_state
     if ffmpeg_process:
         try:
+            # First try SIGTERM
             ffmpeg_process.terminate()
             try:
                 ffmpeg_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                # If SIGTERM doesn't work, use SIGKILL
                 ffmpeg_process.kill()
                 ffmpeg_process.wait()
         except Exception as e:
             logger.error(f"Error stopping FFmpeg process: {e}")
         finally:
             ffmpeg_process = None
-    
+            
     player_state['is_playing'] = False
     player_state['position'] = 0
+    player_state['fps'] = 0
+    player_state['speed'] = '0x'
     update_player_state()
 
 def pause_playback():
-    """Pause media playback using SIGSTOP/SIGCONT"""
+    """Pause/resume playback by sending SIGSTOP/SIGCONT"""
     global ffmpeg_process, player_state
     if ffmpeg_process:
         try:
             if player_state['is_playing']:
+                # Send SIGSTOP to pause
                 os.kill(ffmpeg_process.pid, signal.SIGSTOP)
                 player_state['is_playing'] = False
             else:
+                # Send SIGCONT to resume
                 os.kill(ffmpeg_process.pid, signal.SIGCONT)
                 player_state['is_playing'] = True
             update_player_state()
@@ -270,24 +292,43 @@ def upload_file():
 @app.route('/play', methods=['POST'])
 def play():
     """Start playback"""
-    if current_media:
-        play_media(current_media, player_state['position'])
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'error', 'message': 'No media selected'})
+    try:
+        if not current_media:
+            return jsonify({'status': 'error', 'message': 'No media selected'}), 400
+        
+        if play_media(current_media, player_state['position']):
+            return jsonify({'status': 'success', 'message': 'Playback started'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to start playback'}), 500
+    except Exception as e:
+        logger.error(f"Error in play route: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/pause', methods=['POST'])
 def pause():
     """Pause/resume playback"""
-    if pause_playback():
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'error', 'message': 'No media playing'})
+    try:
+        if pause_playback():
+            action = 'paused' if not player_state['is_playing'] else 'resumed'
+            return jsonify({'status': 'success', 'message': f'Playback {action}'})
+        else:
+            return jsonify({'status': 'error', 'message': 'No media playing'}), 400
+    except Exception as e:
+        logger.error(f"Error in pause route: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/stop', methods=['POST'])
 def stop():
     """Stop playback"""
-    global current_media
-    stop_playback()
-    return jsonify({'status': 'success'})
+    try:
+        if not ffmpeg_process:
+            return jsonify({'status': 'error', 'message': 'No media playing'}), 400
+        
+        stop_playback()
+        return jsonify({'status': 'success', 'message': 'Playback stopped'})
+    except Exception as e:
+        logger.error(f"Error in stop route: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @socketio.on('connect')
 def handle_connect():
@@ -297,9 +338,12 @@ def handle_connect():
 @socketio.on('seek')
 def handle_seek(data):
     """Handle seek request"""
-    position = data.get('position', 0)
-    if current_media:
-        play_media(current_media, position)
+    try:
+        position = data.get('position', 0)
+        if current_media and position >= 0:
+            play_media(current_media, position)
+    except Exception as e:
+        logger.error(f"Error handling seek: {e}")
 
 if __name__ == '__main__':
     try:

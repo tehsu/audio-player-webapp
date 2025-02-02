@@ -4,10 +4,16 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
-    && wget https://sw.blackmagicdesign.com/DesktopVideo/v12.4/Blackmagic_Desktop_Video_Linux_12.4.tar.gz \
-    && tar xvf Blackmagic_Desktop_Video_Linux_12.4.tar.gz \
-    && dpkg -i Blackmagic_Desktop_Video_Linux_12.4/deb/x86_64/desktopvideo_12.4_amd64.deb \
-    && rm -rf Blackmagic_Desktop_Video_Linux_12.4*
+    python3-requests \
+    && mkdir -p /scripts
+
+COPY scripts/get_blackmagic_url.py /scripts/
+RUN chmod +x /scripts/get_blackmagic_url.py \
+    && DOWNLOAD_URL=$(/scripts/get_blackmagic_url.py) \
+    && wget "$DOWNLOAD_URL" -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
+    && tar xvf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
+    && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
+    && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /scripts/get_blackmagic_url.py
 
 # Install build dependencies for UxPlay
 RUN apt-get update && apt-get install -y \

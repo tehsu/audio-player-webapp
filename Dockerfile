@@ -1,29 +1,16 @@
 FROM python:3.11-slim
 
-# Install VLC, PipeWire, and video dependencies
+# Install VLC and dependencies
 RUN apt-get update && apt-get install -y \
     vlc \
     libvlc-dev \
-    pipewire \
-    pipewire-audio \
-    libspa-0.2-modules \
-    pipewire-alsa \
-    pipewire-pulse \
-    wireplumber \
-    wget \
-    unzip \
-    build-essential \
-    pkg-config \
+    pulseaudio \
+    pulseaudio-utils \
+    mesa-va-drivers \
+    mesa-vdpau-drivers \
+    va-driver-all \
+    vdpau-driver-all \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Blackmagic Desktop Video SDK
-RUN wget https://sw.blackmagicdesign.com/DesktopVideo/v12.5/Blackmagic_Desktop_Video_Linux_12.5.tar.gz && \
-    tar xvfz Blackmagic_Desktop_Video_Linux_12.5.tar.gz && \
-    cd Blackmagic_Desktop_Video_Linux_12.5/deb/x86_64 && \
-    dpkg -i desktopvideo_12.5_amd64.deb && \
-    dpkg -i desktopvideo-dev_12.5_amd64.deb && \
-    cd ../../.. && \
-    rm -rf Blackmagic_Desktop_Video_Linux_12.5* 
 
 WORKDIR /app
 

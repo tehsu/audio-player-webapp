@@ -7,18 +7,18 @@ services:
       - "5000:5000"
     volumes:
       - .:/app
-      - /run/user/1000/pipewire-0:/run/user/1000/pipewire-0  # PipeWire socket
-      - ${XDG_RUNTIME_DIR}/pipewire:/run/pipewire  # PipeWire runtime
-      - /dev/blackmagic:/dev/blackmagic  # Blackmagic device
+      - /run/user/1000/pulse:/run/user/1000/pulse  # PulseAudio socket
+      - ${HOME}/.config/pulse/cookie:/root/.config/pulse/cookie  # PulseAudio cookie
+      - /dev/dri:/dev/dri  # GPU access
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
-      - XDG_RUNTIME_DIR=/run/user/1000
-      - PIPEWIRE_RUNTIME_DIR=/run/pipewire
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - PULSE_COOKIE=/root/.config/pulse/cookie
+      - DISPLAY=${DISPLAY}
     devices:
-      - /dev/blackmagic
-    restart: unless-stopped
+      - /dev/dri  # GPU device
     group_add:
       - audio
-      - video
-    privileged: true  # Required for Blackmagic hardware access
+      - video  # Required for GPU access
+    restart: unless-stopped

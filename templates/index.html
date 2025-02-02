@@ -1,45 +1,59 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>CFK Audio/Video Player</title>
+    <title>CFK Media Player</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
         }
         .container {
+            max-width: 800px;
+            margin: 0 auto;
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         .controls {
-            margin-top: 20px;
             display: flex;
             gap: 10px;
+            margin-bottom: 20px;
         }
         button {
-            padding: 10px 20px;
+            flex: 1;
+            padding: 10px;
             border: none;
             border-radius: 4px;
-            background-color: #007bff;
+            background-color: #4CAF50;
             color: white;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #45a049;
         }
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
         #status {
-            margin-top: 20px;
             padding: 10px;
+            margin-top: 10px;
             border-radius: 4px;
         }
         .success {
@@ -74,31 +88,19 @@
             font-size: 14px;
             color: #666;
         }
-        .file-input {
-            margin-bottom: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .select-device {
-            padding: 8px;
+        #mediaInfo {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
             border-radius: 4px;
-            border: 1px solid #ccc;
-            width: 200px;
-            margin-bottom: 10px;
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>CFK Audio/Video Player</h1>
-        <div class="file-input">
-            <select id="outputDevice" class="select-device">
-                <option value="default">System Output</option>
-                <option value="blackmagic">Blackmagic Monitor</option>
-            </select>
-            <input type="file" id="mediaFile" accept=".mp3,.wav,.ogg,.m4a,.mp4,.mov,.avi,.mkv">
-        </div>
+        <h1>CFK Media Player</h1>
+        <input type="file" id="mediaFile" accept=".mp3,.wav,.ogg,.m4a,.mp4,.mov,.avi,.mkv,.webm">
         <div class="controls">
             <button id="uploadBtn">Upload</button>
             <button id="playBtn" disabled>Play</button>
@@ -111,6 +113,7 @@
             </div>
             <div class="progress-text" id="uploadProgressText">0%</div>
         </div>
+        <div id="mediaInfo"></div>
         <div id="status"></div>
     </div>
 
@@ -120,8 +123,8 @@
         const pauseBtn = document.getElementById('pauseBtn');
         const stopBtn = document.getElementById('stopBtn');
         const mediaFile = document.getElementById('mediaFile');
-        const outputDevice = document.getElementById('outputDevice');
         const status = document.getElementById('status');
+        const mediaInfo = document.getElementById('mediaInfo');
 
         function showStatus(message, isError = false) {
             status.textContent = message;
@@ -137,7 +140,6 @@
 
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('output_device', outputDevice.value);
 
             const progressContainer = document.querySelector('.progress-container');
             const progressBar = document.getElementById('uploadProgress');
@@ -165,7 +167,11 @@
                     pauseBtn.disabled = false;
                     stopBtn.disabled = false;
                     uploadBtn.disabled = false;
-
+                    
+                    // Show media info
+                    mediaInfo.style.display = 'block';
+                    mediaInfo.textContent = `Type: ${response.is_video ? 'Video' : 'Audio'} - File: ${response.filename}`;
+                    
                     setTimeout(() => {
                         progressContainer.style.display = 'none';
                         progressBar.style.width = '0%';
@@ -193,7 +199,7 @@
                 const data = await response.json();
                 showStatus(data.message);
             } catch (error) {
-                showStatus('Error playing audio', true);
+                showStatus('Error playing media', true);
             }
         });
 
@@ -203,7 +209,7 @@
                 const data = await response.json();
                 showStatus(data.message);
             } catch (error) {
-                showStatus('Error pausing audio', true);
+                showStatus('Error pausing media', true);
             }
         });
 
@@ -213,7 +219,7 @@
                 const data = await response.json();
                 showStatus(data.message);
             } catch (error) {
-                showStatus('Error stopping audio', true);
+                showStatus('Error stopping media', true);
             }
         });
     </script>

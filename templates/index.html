@@ -205,11 +205,13 @@
 
         async function loadFiles() {
             try {
+                console.log("Fetching file list");
                 const response = await fetch('/list_files');
                 const data = await response.json();
                 
                 filesList.innerHTML = '';
                 data.files.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+                console.log(`Found ${data.files.length} files`);
                 
                 data.files.forEach(file => {
                     const fileItem = document.createElement('div');
@@ -228,6 +230,7 @@
                     
                     fileItem.addEventListener('click', async () => {
                         try {
+                            console.log(`Selecting file: ${file.name}`);
                             const response = await fetch('/select_file', {
                                 method: 'POST',
                                 headers: {
@@ -237,6 +240,8 @@
                             });
                             
                             const data = await response.json();
+                            console.log('Selection response:', data);
+                            
                             if (response.ok) {
                                 showStatus(data.message);
                                 playBtn.disabled = false;
@@ -250,10 +255,13 @@
                                 
                                 mediaInfo.style.display = 'block';
                                 mediaInfo.textContent = `Type: ${data.is_video ? 'Video' : 'Audio'} - File: ${data.filename}`;
+                                console.log('File selection UI updated');
                             } else {
+                                console.error('Selection failed:', data.error);
                                 showStatus(data.error, true);
                             }
                         } catch (error) {
+                            console.error('Error selecting file:', error);
                             showStatus('Error selecting file', true);
                         }
                     });
@@ -261,6 +269,7 @@
                     filesList.appendChild(fileItem);
                 });
             } catch (error) {
+                console.error('Error loading files:', error);
                 showStatus('Error loading files', true);
             }
         }
@@ -275,10 +284,12 @@
         uploadBtn.addEventListener('click', function() {
             const file = mediaFile.files[0];
             if (!file) {
+                console.error('No file selected');
                 showStatus('Please select a file first', true);
                 return;
             }
 
+            console.log(`Uploading file: ${file.name}`);
             const formData = new FormData();
             formData.append('file', file);
 
@@ -297,12 +308,14 @@
                     const percentComplete = (e.loaded / e.total) * 100;
                     progressBar.style.width = percentComplete + '%';
                     progressText.textContent = Math.round(percentComplete) + '%';
+                    console.log(`Upload progress: ${Math.round(percentComplete)}%`);
                 }
             };
 
             xhr.onload = function() {
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
+                    console.log('Upload response:', response);
                     showStatus(response.message);
                     playBtn.disabled = false;
                     pauseBtn.disabled = false;
@@ -320,6 +333,7 @@
                     
                     loadFiles();  // Refresh the files list
                 } else {
+                    console.error('Upload failed:', xhr.responseText);
                     showStatus('Upload failed', true);
                     uploadBtn.disabled = false;
                     progressContainer.style.display = 'none';
@@ -327,6 +341,7 @@
             };
 
             xhr.onerror = function() {
+                console.error('Upload request failed');
                 showStatus('Upload failed', true);
                 uploadBtn.disabled = false;
                 progressContainer.style.display = 'none';
@@ -337,30 +352,39 @@
 
         playBtn.addEventListener('click', async () => {
             try {
+                console.log('Starting playback');
                 const response = await fetch('/play', { method: 'POST' });
                 const data = await response.json();
+                console.log('Play response:', data);
                 showStatus(data.message);
             } catch (error) {
+                console.error('Error playing media:', error);
                 showStatus('Error playing media', true);
             }
         });
 
         pauseBtn.addEventListener('click', async () => {
             try {
+                console.log('Pausing playback');
                 const response = await fetch('/pause', { method: 'POST' });
                 const data = await response.json();
+                console.log('Pause response:', data);
                 showStatus(data.message);
             } catch (error) {
+                console.error('Error pausing media:', error);
                 showStatus('Error pausing media', true);
             }
         });
 
         stopBtn.addEventListener('click', async () => {
             try {
+                console.log('Stopping playback');
                 const response = await fetch('/stop', { method: 'POST' });
                 const data = await response.json();
+                console.log('Stop response:', data);
                 showStatus(data.message);
             } catch (error) {
+                console.error('Error stopping media:', error);
                 showStatus('Error stopping media', true);
             }
         });

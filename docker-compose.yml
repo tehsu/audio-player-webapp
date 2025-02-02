@@ -9,16 +9,20 @@ services:
       - .:/app
       - /run/user/1000/pulse:/run/user/1000/pulse  # PulseAudio socket
       - ${HOME}/.config/pulse/cookie:/root/.config/pulse/cookie  # PulseAudio cookie
-      - /dev/dri:/dev/dri  # GPU access
+      - /tmp/.X11-unix:/tmp/.X11-unix  # X11 socket
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
       - PULSE_COOKIE=/root/.config/pulse/cookie
-      - DISPLAY=${DISPLAY}
+      - DISPLAY=:99
+      - PYTHONUNBUFFERED=1  # Enable real-time Python logging
     devices:
       - /dev/dri  # GPU device
     group_add:
       - audio
       - video  # Required for GPU access
     restart: unless-stopped
+    tmpfs:
+      - /tmp  # RAM-based temporary storage for X11
+    shm_size: 8gb  # Increased shared memory for 4K resolution

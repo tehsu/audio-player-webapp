@@ -18,6 +18,16 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 player = None
 current_media = None
 
+# VLC instance options for virtual display
+vlc_options = [
+    '--no-xlib',  # Disable X11 video output
+    '--vout=dummy',  # Use dummy video output
+    '--aout=pulse',  # Use PulseAudio for audio output
+    '--quiet',  # Reduce VLC's output
+    '--no-video-title-show',  # Don't show the title
+    '--no-snapshot-preview',  # Disable snapshot previews
+]
+
 # Create uploads directory if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -26,12 +36,16 @@ def init_player():
     global player
     if player is None:
         logger.info("Initializing new VLC player instance")
-        # Initialize VLC with GPU acceleration
-        instance = vlc.Instance('--vout=gpu')
-        player = instance.media_player_new()
-        # Enable hardware decoding
-        player.set_hwdecoding(True)
-        logger.debug("VLC player initialized with GPU acceleration and hardware decoding")
+        try:
+            # Initialize VLC with virtual display options
+            instance = vlc.Instance(' '.join(vlc_options))
+            player = instance.media_player_new()
+            # Enable hardware decoding
+            player.set_hwdecoding(True)
+            logger.debug("VLC player initialized with virtual display and hardware decoding")
+        except Exception as e:
+            logger.error(f"Error initializing VLC player: {e}", exc_info=True)
+            raise
     else:
         logger.debug("Using existing VLC player instance")
 
@@ -108,7 +122,7 @@ def select_file():
         
         # Create a new media instance
         logger.debug("Creating new VLC media instance")
-        instance = vlc.Instance('--vout=gpu')
+        instance = vlc.Instance(' '.join(vlc_options))
         global current_media
         current_media = instance.media_new(filepath)
         
@@ -160,7 +174,7 @@ def upload_file():
             
             # Create a new media instance
             logger.debug("Creating new VLC media instance")
-            instance = vlc.Instance('--vout=gpu')
+            instance = vlc.Instance(' '.join(vlc_options))
             global current_media
             current_media = instance.media_new(filepath)
             

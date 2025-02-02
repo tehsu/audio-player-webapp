@@ -12,6 +12,7 @@ import subprocess
 import cv2
 import json
 import signal
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG,
@@ -31,8 +32,9 @@ player_state = {
     'current_file': None,
     'duration': 0,
     'position': 0,
+    'fps': 0,
+    'speed': '0x',
     'is_playing': False,
-    'volume': 100,
     'decklink_active': False,
     'airplay_active': False
 }
@@ -57,15 +59,48 @@ def get_video_duration(filepath):
     except:
         return 0
 
+def monitor_ffmpeg_progress(process):
+    """Monitor FFmpeg progress output"""
+    global player_state
+    
+    progress_pattern = re.compile(r'(frame|fps|speed)=\s*([\d.]+)')
+    
+    while process.poll() is None:
+        line = process.stderr.readline().decode('utf-8', errors='ignore')
+        if not line:
+            continue
+            
+        matches = progress_pattern.finditer(line)
+        for match in matches:
+            key, value = match.groups()
+            if key == 'frame':
+                # Calculate position based on frame number and fps
+                if player_state['fps'] > 0:
+                    player_state['position'] = float(value) / player_state['fps']
+            elif key == 'fps':
+                player_state['fps'] = float(value)
+            elif key == 'speed':
+                player_state['speed'] = value + 'x'
+        
+        # Emit state update
+        socketio.emit('player_state_update', player_state)
+        
+        # Don't update too frequently
+        time.sleep(0.1)
+
 def play_media(filepath, seek_position=0):
     """Play media file using FFmpeg"""
     global ffmpeg_process, player_state
     
     if ffmpeg_process:
         ffmpeg_process.terminate()
-        ffmpeg_process.wait()
+        try:
+            ffmpeg_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            ffmpeg_process.kill()
+            ffmpeg_process.wait()
         
-    volume = player_state['volume'] / 100.0
+    volume = 100.0
     
     cmd = [
         'ffmpeg',
@@ -76,7 +111,7 @@ def play_media(filepath, seek_position=0):
         '-f', 'matroska',  # Output format
         '-c:v', 'h264',  # Video codec
         '-c:a', 'aac',  # Audio codec
-        '-af', f'volume={volume}',  # Volume control
+        '-progress', 'pipe:2',  # Output progress to stderr
         'pipe:1'  # Output to pipe
     ]
     
@@ -90,15 +125,25 @@ def play_media(filepath, seek_position=0):
             '-f', 'decklink',
             '-c:v', 'rawvideo',
             '-c:a', 'pcm_s16le',
-            '-af', f'volume={volume}',
+            '-progress', 'pipe:2',
             'DeckLink Output'
         ]
     
     ffmpeg_process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE if not player_state['decklink_active'] else None,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        bufsize=1
     )
+    
+    # Start progress monitoring thread
+    progress_thread = threading.Thread(
+        target=monitor_ffmpeg_progress,
+        args=(ffmpeg_process,),
+        daemon=True
+    )
+    progress_thread.start()
     
     player_state['is_playing'] = True
     player_state['position'] = seek_position
@@ -146,13 +191,6 @@ def pause_playback():
             logger.error(f"Error pausing/resuming FFmpeg process: {e}")
             return False
     return False
-
-def set_volume(volume):
-    """Set playback volume"""
-    global player_state
-    player_state['volume'] = max(0, min(100, volume))
-    if player_state['is_playing'] and current_media:
-        play_media(current_media, player_state['position'])
 
 def seek(position):
     """Seek to position in media"""
@@ -448,6 +486,7 @@ def output_to_decklink():
             '-f', 'decklink',
             '-c:v', 'rawvideo',
             '-c:a', 'pcm_s16le',
+            '-progress', 'pipe:2',
             'DeckLink Output'
         ]
         
@@ -455,8 +494,18 @@ def output_to_decklink():
         decklink_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            bufsize=1
         )
+        
+        # Start progress monitoring thread
+        progress_thread = threading.Thread(
+            target=monitor_ffmpeg_progress,
+            args=(decklink_process,),
+            daemon=True
+        )
+        progress_thread.start()
         
         player_state['decklink_active'] = True
         
@@ -515,11 +564,6 @@ def handle_connect():
 def handle_seek(data):
     position = data.get('position', 0)
     seek(position)
-
-@socketio.on('volume')
-def handle_volume(data):
-    volume = data.get('volume', 100)
-    set_volume(volume)
 
 if __name__ == '__main__':
     try:

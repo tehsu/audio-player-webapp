@@ -185,6 +185,21 @@
             flex: 1;
             height: 5px;
         }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 5px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+        #current-file {
+            font-weight: bold;
+        }
+        #playback-info {
+            font-size: 14px;
+            color: #666;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
@@ -209,7 +224,14 @@
             <div class="progress-text" id="uploadProgressText">0%</div>
         </div>
         <div id="mediaInfo"></div>
-        <div id="status"></div>
+        <div class="status-bar">
+            <span id="current-file">No file selected</span>
+            <span id="playback-info">
+                FPS: <span id="fps">0</span> |
+                Speed: <span id="speed">0x</span> |
+                Time: <span id="position">0:00</span> / <span id="duration">0:00</span>
+            </span>
+        </div>
         <div class="media-controls">
             <div class="time-display">
                 <span id="currentTime">0:00</span>
@@ -535,86 +557,72 @@
 
         // Initialize Socket.IO
         const socket = io();
-        let seeking = false;
-        
+        let player_state = {
+            current_file: null,
+            duration: 0,
+            position: 0,
+            fps: 0,
+            speed: '0x',
+            is_playing: false,
+            decklink_active: false,
+            airplay_active: false
+        };
+
         // Handle player state updates
         socket.on('player_state_update', (state) => {
-            if (!seeking) {
-                updateProgressBar(state.position, state.duration);
-                updatePlaybackState(state.is_playing);
-                updateVolumeDisplay(state.volume);
-                
-                // Update Blackmagic and AirPlay buttons
-                deckLinkBtn.disabled = !state.current_file || state.decklink_active || state.airplay_active;
-                stopDeckLinkBtn.disabled = !state.decklink_active;
-                airplayBtn.disabled = state.airplay_active;
-                stopAirplayBtn.disabled = !state.airplay_active;
-            }
+            player_state = state;
+            updateUI();
         });
-        
-        // Format time in seconds to MM:SS
+
+        function updateUI() {
+            // Update file name
+            document.getElementById('current-file').textContent = 
+                player_state.current_file || 'No file selected';
+
+            // Update playback info
+            document.getElementById('fps').textContent = 
+                player_state.fps.toFixed(1);
+            document.getElementById('speed').textContent = 
+                player_state.speed;
+            document.getElementById('position').textContent = 
+                formatTime(player_state.position);
+            document.getElementById('duration').textContent = 
+                formatTime(player_state.duration);
+
+            // Update progress bar
+            const progress = (player_state.position / player_state.duration) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+            document.getElementById('currentTime').textContent = formatTime(player_state.position);
+            document.getElementById('duration').textContent = formatTime(player_state.duration);
+
+            // Update Blackmagic and AirPlay buttons
+            deckLinkBtn.disabled = !player_state.current_file || player_state.decklink_active || player_state.airplay_active;
+            stopDeckLinkBtn.disabled = !player_state.decklink_active;
+            airplayBtn.disabled = player_state.airplay_active;
+            stopAirplayBtn.disabled = !player_state.airplay_active;
+        }
+
         function formatTime(seconds) {
-            seconds = Math.floor(seconds / 1000);
-            const minutes = Math.floor(seconds / 60);
-            seconds = seconds % 60;
-            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            if (!seconds) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
         }
-        
-        // Update progress bar and time display
-        function updateProgressBar(position, duration) {
-            const progressFill = document.getElementById('progressFill');
-            const currentTime = document.getElementById('currentTime');
-            const durationElement = document.getElementById('duration');
-            
-            if (duration > 0) {
-                const progress = (position / duration) * 100;
-                progressFill.style.width = `${progress}%`;
-                currentTime.textContent = formatTime(position);
-                durationElement.textContent = formatTime(duration);
-            } else {
-                progressFill.style.width = '0%';
-                currentTime.textContent = '0:00';
-                durationElement.textContent = '0:00';
-            }
-        }
-        
-        // Update play/pause button state
-        function updatePlaybackState(isPlaying) {
-            playBtn.disabled = isPlaying;
-            pauseBtn.disabled = !isPlaying;
-        }
-        
-        // Update volume display
-        function updateVolumeDisplay(volume) {
-            const volumeSlider = document.getElementById('volumeSlider');
-            const volumeValue = document.getElementById('volumeValue');
-            volumeSlider.value = volume;
-            volumeValue.textContent = `${volume}%`;
-        }
-        
-        // Handle progress bar clicks
-        const progressBar = document.getElementById('progressBar');
-        progressBar.addEventListener('mousedown', (e) => {
-            seeking = true;
-            handleSeek(e);
+
+        // Progress bar seeking
+        document.getElementById('progressBar').addEventListener('click', function(e) {
+            const rect = this.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            const seekTime = pos * player_state.duration;
+            socket.emit('seek', { position: seekTime });
         });
-        
-        document.addEventListener('mouseup', () => {
-            seeking = false;
-        });
-        
-        function handleSeek(e) {
-            const rect = progressBar.getBoundingClientRect();
-            const position = (e.clientX - rect.left) / rect.width;
-            socket.emit('seek', { position: position * player_state.duration });
-        }
-        
+
         // Handle volume changes
         const volumeSlider = document.getElementById('volumeSlider');
         volumeSlider.addEventListener('input', (e) => {
             socket.emit('set_volume', { volume: parseInt(e.target.value) });
         });
-        
+
         // Load files when the page loads
         loadFiles();
     </script>

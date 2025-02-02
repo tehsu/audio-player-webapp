@@ -10,6 +10,7 @@ services:
       - /run/user/1000/pulse:/run/user/1000/pulse  # PulseAudio socket
       - ${HOME}/.config/pulse/cookie:/root/.config/pulse/cookie  # PulseAudio cookie
       - /tmp/.X11-unix:/tmp/.X11-unix  # X11 socket
+      - /run/user/1000:/run/user/1000  # XDG runtime directory
     environment:
       - FLASK_ENV=development
       - FLASK_APP=app.py
@@ -17,6 +18,7 @@ services:
       - PULSE_COOKIE=/root/.config/pulse/cookie
       - DISPLAY=:99
       - PYTHONUNBUFFERED=1  # Enable real-time Python logging
+      - XDG_RUNTIME_DIR=/run/user/1000  # Set XDG runtime directory
     devices:
       - /dev/dri  # GPU device
     group_add:

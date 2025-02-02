@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask_socketio import SocketIO, emit
 import vlc
 import os
 import threading
@@ -15,8 +16,17 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
 player = None
 current_media = None
+player_state = {
+    'current_file': None,
+    'duration': 0,
+    'position': 0,
+    'is_playing': False,
+    'volume': 100
+}
 
 # VLC instance options for virtual display
 vlc_options = [
@@ -82,6 +92,55 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(func=cleanup_old_files, trigger="interval", hours=1)
 scheduler.start()
 
+def update_player_state():
+    """Update and broadcast player state to all clients"""
+    global player, player_state
+    if player and current_media:
+        player_state['position'] = player.get_time()
+        player_state['duration'] = player.get_length()
+        player_state['is_playing'] = player.is_playing()
+        player_state['volume'] = player.audio_get_volume()
+        socketio.emit('player_state_update', player_state)
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    logger.info("Client connected")
+    emit('player_state_update', player_state)
+
+@socketio.on('seek')
+def handle_seek(data):
+    """Handle seek request"""
+    try:
+        if player and current_media:
+            position = int(data['position'])
+            player.set_time(position)
+            update_player_state()
+    except Exception as e:
+        logger.error(f"Error handling seek: {e}")
+
+@socketio.on('set_volume')
+def handle_volume(data):
+    """Handle volume change request"""
+    try:
+        if player:
+            volume = int(data['volume'])
+            player.audio_set_volume(volume)
+            update_player_state()
+    except Exception as e:
+        logger.error(f"Error handling volume change: {e}")
+
+def start_state_update_thread():
+    """Start thread to periodically update player state"""
+    def update_loop():
+        while True:
+            if player and current_media:
+                update_player_state()
+            time.sleep(0.1)  # Update every 100ms
+    
+    thread = threading.Thread(target=update_loop, daemon=True)
+    thread.start()
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -123,7 +182,7 @@ def select_file():
         # Create a new media instance
         logger.debug("Creating new VLC media instance")
         instance = vlc.Instance(' '.join(vlc_options))
-        global current_media
+        global current_media, player_state
         current_media = instance.media_new(filepath)
         
         # Enable hardware decoding for video files
@@ -134,7 +193,14 @@ def select_file():
         logger.debug("Setting media in player")
         player.set_media(current_media)
         
+        # Update player state
+        player_state['current_file'] = filename
+        player_state['position'] = 0
+        player_state['is_playing'] = False
+        
         logger.info(f"File selected successfully: {filename}")
+        socketio.emit('player_state_update', player_state)
+        
         return jsonify({
             'message': 'File selected successfully',
             'filename': filename,
@@ -204,6 +270,7 @@ def play():
     
     logger.info("Starting playback")
     player.play()
+    update_player_state()
     return jsonify({'message': 'Started playback'})
 
 @app.route('/pause', methods=['POST'])
@@ -211,6 +278,7 @@ def pause():
     if player:
         logger.info("Pausing playback")
         player.pause()
+        update_player_state()
         return jsonify({'message': 'Media paused'})
     logger.error("No media playing")
     return jsonify({'error': 'No media playing'}), 400
@@ -220,6 +288,7 @@ def stop():
     if player:
         logger.info("Stopping playback")
         player.stop()
+        update_player_state()
         return jsonify({'message': 'Stopped media'})
     logger.error("No media playing")
     return jsonify({'error': 'No media playing'}), 400
@@ -227,7 +296,8 @@ def stop():
 if __name__ == '__main__':
     try:
         logger.info("Starting Flask application")
-        app.run(host='0.0.0.0', port=5000)
+        start_state_update_thread()
+        socketio.run(app, host='0.0.0.0', port=5000)
     finally:
         logger.info("Shutting down scheduler")
         scheduler.shutdown()

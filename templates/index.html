@@ -150,7 +150,43 @@
             width: auto;
             padding: 5px 10px;
         }
+        .media-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #666;
+        }
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .volume-slider {
+            flex: 1;
+            height: 5px;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
 <body>
     <div class="container">
@@ -170,7 +206,20 @@
         </div>
         <div id="mediaInfo"></div>
         <div id="status"></div>
-        
+        <div class="media-controls">
+            <div class="time-display">
+                <span id="currentTime">0:00</span>
+                <span id="duration">0:00</span>
+            </div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="volume-control">
+                <span>Volume:</span>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100">
+                <span id="volumeValue">100%</span>
+            </div>
+        </div>
         <h2>Uploaded Files</h2>
         <button id="refreshBtn" class="refresh-btn">Refresh List</button>
         <div id="filesList" class="files-list"></div>
@@ -245,7 +294,7 @@
                             if (response.ok) {
                                 showStatus(data.message);
                                 playBtn.disabled = false;
-                                pauseBtn.disabled = false;
+                                pauseBtn.disabled = true;
                                 stopBtn.disabled = false;
                                 
                                 document.querySelectorAll('.file-item').forEach(item => {
@@ -255,7 +304,6 @@
                                 
                                 mediaInfo.style.display = 'block';
                                 mediaInfo.textContent = `Type: ${data.is_video ? 'Video' : 'Audio'} - File: ${data.filename}`;
-                                console.log('File selection UI updated');
                             } else {
                                 console.error('Selection failed:', data.error);
                                 showStatus(data.error, true);
@@ -318,7 +366,7 @@
                     console.log('Upload response:', response);
                     showStatus(response.message);
                     playBtn.disabled = false;
-                    pauseBtn.disabled = false;
+                    pauseBtn.disabled = true;
                     stopBtn.disabled = false;
                     uploadBtn.disabled = false;
                     
@@ -389,6 +437,82 @@
             }
         });
 
+        // Initialize Socket.IO
+        const socket = io();
+        let seeking = false;
+        
+        // Handle player state updates
+        socket.on('player_state_update', (state) => {
+            if (!seeking) {
+                updateProgressBar(state.position, state.duration);
+                updatePlaybackState(state.is_playing);
+                updateVolumeDisplay(state.volume);
+            }
+        });
+        
+        // Format time in seconds to MM:SS
+        function formatTime(seconds) {
+            seconds = Math.floor(seconds / 1000);
+            const minutes = Math.floor(seconds / 60);
+            seconds = seconds % 60;
+            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        // Update progress bar and time display
+        function updateProgressBar(position, duration) {
+            const progressFill = document.getElementById('progressFill');
+            const currentTime = document.getElementById('currentTime');
+            const durationElement = document.getElementById('duration');
+            
+            if (duration > 0) {
+                const progress = (position / duration) * 100;
+                progressFill.style.width = `${progress}%`;
+                currentTime.textContent = formatTime(position);
+                durationElement.textContent = formatTime(duration);
+            } else {
+                progressFill.style.width = '0%';
+                currentTime.textContent = '0:00';
+                durationElement.textContent = '0:00';
+            }
+        }
+        
+        // Update play/pause button state
+        function updatePlaybackState(isPlaying) {
+            playBtn.disabled = isPlaying;
+            pauseBtn.disabled = !isPlaying;
+        }
+        
+        // Update volume display
+        function updateVolumeDisplay(volume) {
+            const volumeSlider = document.getElementById('volumeSlider');
+            const volumeValue = document.getElementById('volumeValue');
+            volumeSlider.value = volume;
+            volumeValue.textContent = `${volume}%`;
+        }
+        
+        // Handle progress bar clicks
+        const progressBar = document.getElementById('progressBar');
+        progressBar.addEventListener('mousedown', (e) => {
+            seeking = true;
+            handleSeek(e);
+        });
+        
+        document.addEventListener('mouseup', () => {
+            seeking = false;
+        });
+        
+        function handleSeek(e) {
+            const rect = progressBar.getBoundingClientRect();
+            const position = (e.clientX - rect.left) / rect.width;
+            socket.emit('seek', { position: position * player_state.duration });
+        }
+        
+        // Handle volume changes
+        const volumeSlider = document.getElementById('volumeSlider');
+        volumeSlider.addEventListener('input', (e) => {
+            socket.emit('set_volume', { volume: parseInt(e.target.value) });
+        });
+        
         // Load files when the page loads
         loadFiles();
     </script>

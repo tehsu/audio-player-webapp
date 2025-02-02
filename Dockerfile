@@ -33,7 +33,6 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
     libplist-dev \
-    libfdk-aac-dev \
     wget \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
@@ -64,22 +63,17 @@ RUN apt-get update && apt-get install -y \
     xauth \
     imagemagick \
     ffmpeg \
-    v4l2loopback-dkms \
-    v4l2loopback-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements first to leverage Docker cache
+# Install NumPy first to ensure correct version
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install numpy==1.24.3 && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
-
-# Create a virtual display script with 4K resolution
-#RUN echo '#!/bin/bash\nXvfb :99 -screen 0 3840x2160x24 &\nexport DISPLAY=:99\nsleep 1\necho "Starting Flask app..."\nexec python app.py' > /app/start.sh && \
-#    chmod +x /app/start.sh
 
 # Copy the start script
 COPY start.sh /app/start.sh

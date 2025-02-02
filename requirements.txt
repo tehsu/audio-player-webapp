@@ -5,6 +5,7 @@ python-socketio==5.10.0
 eventlet==0.33.3
 python-vlc==3.0.20123
 APScheduler==3.10.4
+numpy==1.24.3
 opencv-python-headless==4.8.1.78
 Werkzeug==2.3.7
 click==8.1.7

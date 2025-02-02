@@ -1,561 +1,118 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>CFK Media Player</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Player</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
+        .player-container {
             max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin: 2rem auto;
+            padding: 1rem;
         }
-        h1, h2 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-        }
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #ddd;
+        
+        .status-bar {
+            background: #f8f9fa;
+            padding: 0.5rem;
             border-radius: 4px;
+            margin-bottom: 1rem;
         }
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        button {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            border-radius: 4px;
-            background-color: #4CAF50;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        #status {
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
+        
         .progress-container {
-            margin-top: 20px;
-            width: 100%;
-            max-width: 300px;
-        }
-        .progress-bar {
-            width: 100%;
             height: 20px;
-            background-color: #f0f0f0;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .progress {
-            width: 0%;
-            height: 100%;
-            background-color: #4CAF50;
-            transition: width 0.3s ease;
-        }
-        .progress-text {
-            text-align: center;
-            margin-top: 5px;
-            font-size: 14px;
-            color: #666;
-        }
-        #mediaInfo {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f8f9fa;
+            background-color: #e9ecef;
             border-radius: 4px;
-            display: none;
-        }
-        .files-list {
-            margin-top: 20px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .file-item {
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
+            margin: 1rem 0;
+            position: relative;
             cursor: pointer;
-            transition: background-color 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
-        .file-item:last-child {
-            border-bottom: none;
+        
+        #progressFill {
+            height: 100%;
+            background-color: #007bff;
+            border-radius: 4px;
+            width: 0;
+            transition: width 0.1s linear;
         }
+        
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            cursor: pointer;
+            padding: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
         .file-item:hover {
             background-color: #f8f9fa;
         }
-        .file-item.selected {
+        
+        .file-item.active {
             background-color: #e9ecef;
         }
-        .file-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .file-name {
-            font-weight: bold;
-        }
-        .file-meta {
-            font-size: 12px;
-            color: #666;
-        }
-        .file-type {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .file-type.video {
-            background-color: #cce5ff;
-            color: #004085;
-        }
-        .file-type.audio {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .refresh-btn {
-            margin-bottom: 10px;
-            width: auto;
-            padding: 5px 10px;
-        }
-        .media-controls {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 20px;
-            background-color: #ddd;
-            border-radius: 10px;
-            overflow: hidden;
-            cursor: pointer;
-        }
-        .progress-fill {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.1s linear;
-        }
-        .time-display {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            color: #666;
-        }
-        .volume-control {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .volume-slider {
-            flex: 1;
-            height: 5px;
-        }
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            padding: 5px;
-            background-color: #f0f0f0;
-            border-radius: 4px;
-        }
-        #current-file {
-            font-weight: bold;
-        }
-        #playback-info {
-            font-size: 14px;
-            color: #666;
-        }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>CFK Media Player</h1>
-        <input type="file" id="mediaFile" accept=".mp3,.wav,.ogg,.m4a,.mp4,.mov,.avi,.mkv,.webm">
-        <div class="control-buttons">
-            <button id="uploadBtn">Upload</button>
-            <button id="playBtn" disabled>Play</button>
-            <button id="pauseBtn" disabled>Pause</button>
-            <button id="stopBtn" disabled>Stop</button>
-            <button id="deckLinkBtn" disabled>Output to Blackmagic</button>
-            <button id="stopDeckLinkBtn" disabled>Stop Blackmagic</button>
-            <button id="airplayBtn">Start AirPlay</button>
-            <button id="stopAirplayBtn" disabled>Stop AirPlay</button>
+    <div class="player-container">
+        <h1 class="mb-4">Media Player</h1>
+        
+        <!-- Upload Form -->
+        <div class="mb-4">
+            <form id="uploadForm" class="mb-3">
+                <div class="input-group">
+                    <input type="file" class="form-control" id="fileInput" accept="video/*,audio/*">
+                    <button class="btn btn-primary" type="submit">Upload</button>
+                </div>
+            </form>
         </div>
-        <div class="progress-container" style="display: none;">
-            <div class="progress-bar">
-                <div class="progress" id="uploadProgress"></div>
-            </div>
-            <div class="progress-text" id="uploadProgressText">0%</div>
-        </div>
-        <div id="mediaInfo"></div>
+        
+        <!-- Status Bar -->
         <div class="status-bar">
-            <span id="current-file">No file selected</span>
-            <span id="playback-info">
-                FPS: <span id="fps">0</span> |
-                Speed: <span id="speed">0x</span> |
-                Time: <span id="position">0:00</span> / <span id="duration">0:00</span>
-            </span>
-        </div>
-        <div class="media-controls">
-            <div class="time-display">
-                <span id="currentTime">0:00</span>
-                <span id="duration">0:00</span>
-            </div>
-            <div class="progress-bar" id="progressBar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <div class="volume-control">
-                <span>Volume:</span>
-                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100">
-                <span id="volumeValue">100%</span>
+            <div class="row">
+                <div class="col">
+                    <strong>File:</strong> <span id="current-file">No file selected</span>
+                </div>
+                <div class="col">
+                    <strong>FPS:</strong> <span id="fps">0.0</span>
+                </div>
+                <div class="col">
+                    <strong>Speed:</strong> <span id="speed">0x</span>
+                </div>
+                <div class="col">
+                    <strong>Time:</strong> <span id="position">00:00</span> / <span id="duration">00:00</span>
+                </div>
             </div>
         </div>
-        <h2>Uploaded Files</h2>
-        <button id="refreshBtn" class="refresh-btn">Refresh List</button>
-        <div id="filesList" class="files-list"></div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressBar">
+            <div id="progressFill"></div>
+        </div>
+        
+        <!-- Controls -->
+        <div class="btn-group mb-4">
+            <button id="playBtn" class="btn btn-primary" disabled>Play</button>
+            <button id="pauseBtn" class="btn btn-secondary" disabled>Pause</button>
+            <button id="stopBtn" class="btn btn-danger" disabled>Stop</button>
+        </div>
+        
+        <!-- File List -->
+        <div class="card">
+            <div class="card-header">
+                Files
+            </div>
+            <div class="card-body file-list" id="fileList">
+                <!-- Files will be listed here -->
+            </div>
+        </div>
     </div>
-
+    
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
     <script>
-        const uploadBtn = document.getElementById('uploadBtn');
-        const playBtn = document.getElementById('playBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const deckLinkBtn = document.getElementById('deckLinkBtn');
-        const stopDeckLinkBtn = document.getElementById('stopDeckLinkBtn');
-        const airplayBtn = document.getElementById('airplayBtn');
-        const stopAirplayBtn = document.getElementById('stopAirplayBtn');
-        const mediaFile = document.getElementById('mediaFile');
-        const status = document.getElementById('status');
-        const mediaInfo = document.getElementById('mediaInfo');
-        const filesList = document.getElementById('filesList');
-        const refreshBtn = document.getElementById('refreshBtn');
-
-        function formatFileSize(bytes) {
-            const units = ['B', 'KB', 'MB', 'GB'];
-            let size = bytes;
-            let unitIndex = 0;
-            while (size >= 1024 && unitIndex < units.length - 1) {
-                size /= 1024;
-                unitIndex++;
-            }
-            return `${size.toFixed(1)} ${units[unitIndex]}`;
-        }
-
-        function formatDate(isoString) {
-            const date = new Date(isoString);
-            return date.toLocaleString();
-        }
-
-        async function loadFiles() {
-            try {
-                console.log("Fetching file list");
-                const response = await fetch('/list_files');
-                const data = await response.json();
-                
-                filesList.innerHTML = '';
-                data.files.sort((a, b) => new Date(b.modified) - new Date(a.modified));
-                console.log(`Found ${data.files.length} files`);
-                
-                data.files.forEach(file => {
-                    const fileItem = document.createElement('div');
-                    fileItem.className = 'file-item';
-                    fileItem.innerHTML = `
-                        <div class="file-info">
-                            <div class="file-name">${file.name}</div>
-                            <div class="file-meta">
-                                ${formatFileSize(file.size)} • ${formatDate(file.modified)}
-                            </div>
-                        </div>
-                        <div class="file-type ${file.is_video ? 'video' : 'audio'}">
-                            ${file.is_video ? 'Video' : 'Audio'}
-                        </div>
-                    `;
-                    
-                    fileItem.addEventListener('click', async (event) => {
-                        try {
-                            console.log(`Selecting file: ${file.name}`);
-                            const response = await fetch('/select_file', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({ filename: file.name })
-                            });
-                            
-                            const data = await response.json();
-                            console.log('Selection response:', data);
-                            
-                            if (response.ok) {
-                                showStatus(data.message);
-                                playBtn.disabled = false;
-                                pauseBtn.disabled = true;
-                                stopBtn.disabled = false;
-                                deckLinkBtn.disabled = false;
-                                
-                                document.querySelectorAll('.file-item').forEach(item => {
-                                    item.classList.remove('selected');
-                                });
-                                event.currentTarget.classList.add('selected');
-                                
-                                mediaInfo.style.display = 'block';
-                                mediaInfo.textContent = `Type: ${data.is_video ? 'Video' : 'Audio'} - File: ${data.filename}`;
-                            } else {
-                                console.error('Selection failed:', data.error);
-                                showStatus(data.error, true);
-                            }
-                        } catch (error) {
-                            console.error('Error selecting file:', error);
-                            showStatus('Error selecting file', true);
-                        }
-                    });
-                    
-                    filesList.appendChild(fileItem);
-                });
-            } catch (error) {
-                console.error('Error loading files:', error);
-                showStatus('Error loading files', true);
-            }
-        }
-
-        refreshBtn.addEventListener('click', loadFiles);
-
-        function showStatus(message, isError = false) {
-            status.textContent = message;
-            status.className = isError ? 'error' : 'success';
-        }
-
-        uploadBtn.addEventListener('click', function() {
-            const file = mediaFile.files[0];
-            if (!file) {
-                console.error('No file selected');
-                showStatus('Please select a file first', true);
-                return;
-            }
-
-            console.log(`Uploading file: ${file.name}`);
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const progressContainer = document.querySelector('.progress-container');
-            const progressBar = document.getElementById('uploadProgress');
-            const progressText = document.getElementById('uploadProgressText');
-
-            progressContainer.style.display = 'block';
-            uploadBtn.disabled = true;
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-
-            xhr.upload.onprogress = function(e) {
-                if (e.lengthComputable) {
-                    const percentComplete = (e.loaded / e.total) * 100;
-                    progressBar.style.width = percentComplete + '%';
-                    progressText.textContent = Math.round(percentComplete) + '%';
-                    console.log(`Upload progress: ${Math.round(percentComplete)}%`);
-                }
-            };
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    console.log('Upload response:', response);
-                    showStatus(response.message);
-                    playBtn.disabled = false;
-                    pauseBtn.disabled = true;
-                    stopBtn.disabled = false;
-                    deckLinkBtn.disabled = false;
-                    uploadBtn.disabled = false;
-                    
-                    mediaInfo.style.display = 'block';
-                    mediaInfo.textContent = `Type: ${response.is_video ? 'Video' : 'Audio'} - File: ${response.filename}`;
-                    
-                    setTimeout(() => {
-                        progressContainer.style.display = 'none';
-                        progressBar.style.width = '0%';
-                        progressText.textContent = '0%';
-                    }, 1000);
-                    
-                    loadFiles();  // Refresh the files list
-                } else {
-                    console.error('Upload failed:', xhr.responseText);
-                    showStatus('Upload failed', true);
-                    uploadBtn.disabled = false;
-                    progressContainer.style.display = 'none';
-                }
-            };
-
-            xhr.onerror = function() {
-                console.error('Upload request failed');
-                showStatus('Upload failed', true);
-                uploadBtn.disabled = false;
-                progressContainer.style.display = 'none';
-            };
-
-            xhr.send(formData);
-        });
-
-        playBtn.addEventListener('click', async () => {
-            try {
-                console.log('Starting playback');
-                const response = await fetch('/play', { method: 'POST' });
-                const data = await response.json();
-                console.log('Play response:', data);
-                showStatus(data.message);
-            } catch (error) {
-                console.error('Error playing media:', error);
-                showStatus('Error playing media', true);
-            }
-        });
-
-        pauseBtn.addEventListener('click', async () => {
-            try {
-                console.log('Pausing playback');
-                const response = await fetch('/pause', { method: 'POST' });
-                const data = await response.json();
-                console.log('Pause response:', data);
-                showStatus(data.message);
-            } catch (error) {
-                console.error('Error pausing media:', error);
-                showStatus('Error pausing media', true);
-            }
-        });
-
-        stopBtn.addEventListener('click', async () => {
-            try {
-                console.log('Stopping playback');
-                const response = await fetch('/stop', { method: 'POST' });
-                const data = await response.json();
-                console.log('Stop response:', data);
-                showStatus(data.message);
-            } catch (error) {
-                console.error('Error stopping media:', error);
-                showStatus('Error stopping media', true);
-            }
-        });
-
-        deckLinkBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/output_to_decklink', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ filename: player_state.current_file })
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showStatus(data.message);
-                    deckLinkBtn.disabled = true;
-                    stopDeckLinkBtn.disabled = false;
-                } else {
-                    showStatus(data.error, true);
-                }
-            } catch (error) {
-                console.error('Error starting Blackmagic output:', error);
-                showStatus('Error starting Blackmagic output', true);
-            }
-        });
-        
-        stopDeckLinkBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/stop_decklink', {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showStatus(data.message);
-                    deckLinkBtn.disabled = false;
-                    stopDeckLinkBtn.disabled = true;
-                } else {
-                    showStatus(data.error, true);
-                }
-            } catch (error) {
-                console.error('Error stopping Blackmagic output:', error);
-                showStatus('Error stopping Blackmagic output', true);
-            }
-        });
-
-        airplayBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/start_airplay', {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showStatus(data.message);
-                    airplayBtn.disabled = true;
-                    stopAirplayBtn.disabled = false;
-                    deckLinkBtn.disabled = true;
-                } else {
-                    showStatus(data.error, true);
-                }
-            } catch (error) {
-                console.error('Error starting AirPlay:', error);
-                showStatus('Error starting AirPlay', true);
-            }
-        });
-        
-        stopAirplayBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/stop_airplay', {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                if (response.ok) {
-                    showStatus(data.message);
-                    airplayBtn.disabled = false;
-                    stopAirplayBtn.disabled = true;
-                    deckLinkBtn.disabled = false;
-                } else {
-                    showStatus(data.error, true);
-                }
-            } catch (error) {
-                console.error('Error stopping AirPlay:', error);
-                showStatus('Error stopping AirPlay', true);
-            }
-        });
-
-        // Initialize Socket.IO
         const socket = io();
         let player_state = {
             current_file: null,
@@ -563,17 +120,131 @@
             position: 0,
             fps: 0,
             speed: '0x',
-            is_playing: false,
-            decklink_active: false,
-            airplay_active: false
+            is_playing: false
         };
-
-        // Handle player state updates
+        
+        // DOM Elements
+        const uploadForm = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const playBtn = document.getElementById('playBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        
+        // Socket Events
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        
         socket.on('player_state_update', (state) => {
             player_state = state;
             updateUI();
         });
-
+        
+        // Event Listeners
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    console.log('File uploaded:', data);
+                    loadFileList();
+                } else {
+                    console.error('Upload error:', data.error);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+            }
+        });
+        
+        playBtn.addEventListener('click', async () => {
+            const response = await fetch('/play', { method: 'POST' });
+            const data = await response.json();
+            console.log('Play response:', data);
+        });
+        
+        pauseBtn.addEventListener('click', async () => {
+            const response = await fetch('/pause', { method: 'POST' });
+            const data = await response.json();
+            console.log('Pause response:', data);
+        });
+        
+        stopBtn.addEventListener('click', async () => {
+            const response = await fetch('/stop', { method: 'POST' });
+            const data = await response.json();
+            console.log('Stop response:', data);
+        });
+        
+        progressBar.addEventListener('click', (e) => {
+            const rect = progressBar.getBoundingClientRect();
+            const position = (e.clientX - rect.left) / rect.width;
+            const seekTime = position * player_state.duration;
+            socket.emit('seek', { position: seekTime });
+        });
+        
+        // Helper Functions
+        function formatTime(seconds) {
+            seconds = Math.floor(seconds);
+            const minutes = Math.floor(seconds / 60);
+            seconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        async function loadFileList() {
+            try {
+                const response = await fetch('/files');
+                const data = await response.json();
+                
+                fileList.innerHTML = '';
+                data.files.forEach(file => {
+                    const div = document.createElement('div');
+                    div.className = 'file-item';
+                    if (file.name === player_state.current_file) {
+                        div.classList.add('active');
+                    }
+                    
+                    div.textContent = file.name;
+                    div.addEventListener('click', () => selectFile(file.name));
+                    fileList.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading file list:', error);
+            }
+        }
+        
+        async function selectFile(filename) {
+            try {
+                const response = await fetch('/select', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    console.log('File selected:', data);
+                    loadFileList();
+                } else {
+                    console.error('Selection error:', data.error);
+                }
+            } catch (error) {
+                console.error('Selection error:', error);
+            }
+        }
+        
         function updateUI() {
             // Update file name
             document.getElementById('current-file').textContent = 
@@ -603,37 +274,10 @@
             playBtn.disabled = !player_state.current_file || player_state.is_playing;
             pauseBtn.disabled = !player_state.current_file || !player_state.is_playing;
             stopBtn.disabled = !player_state.current_file;
-
-            // Update Blackmagic and AirPlay buttons
-            deckLinkBtn.disabled = !player_state.current_file || player_state.decklink_active || player_state.airplay_active;
-            stopDeckLinkBtn.disabled = !player_state.decklink_active;
-            airplayBtn.disabled = player_state.airplay_active;
-            stopAirplayBtn.disabled = !player_state.airplay_active;
         }
-
-        function formatTime(seconds) {
-            if (!seconds) return '0:00';
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // Progress bar seeking
-        document.getElementById('progressBar').addEventListener('click', function(e) {
-            const rect = this.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            const seekTime = pos * player_state.duration;
-            socket.emit('seek', { position: seekTime });
-        });
-
-        // Handle volume changes
-        const volumeSlider = document.getElementById('volumeSlider');
-        volumeSlider.addEventListener('input', (e) => {
-            socket.emit('set_volume', { volume: parseInt(e.target.value) });
-        });
-
-        // Load files when the page loads
-        loadFiles();
+        
+        // Initial load
+        loadFileList();
     </script>
 </body>
 </html>

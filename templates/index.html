@@ -50,6 +50,30 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+        .progress-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 300px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 14px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -61,6 +85,12 @@
             <button id="playBtn" disabled>Play</button>
             <button id="pauseBtn" disabled>Pause</button>
             <button id="stopBtn" disabled>Stop</button>
+        </div>
+        <div class="progress-container" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress" id="uploadProgress"></div>
+            </div>
+            <div class="progress-text" id="uploadProgressText">0%</div>
         </div>
         <div id="status"></div>
     </div>
@@ -78,7 +108,7 @@
             status.className = isError ? 'error' : 'success';
         }
 
-        uploadBtn.addEventListener('click', async () => {
+        uploadBtn.addEventListener('click', function() {
             const file = audioFile.files[0];
             if (!file) {
                 showStatus('Please select a file first', true);
@@ -88,24 +118,53 @@
             const formData = new FormData();
             formData.append('file', file);
 
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showStatus(data.message);
+            const progressContainer = document.querySelector('.progress-container');
+            const progressBar = document.getElementById('uploadProgress');
+            const progressText = document.getElementById('uploadProgressText');
+
+            progressContainer.style.display = 'block';
+            uploadBtn.disabled = true;
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    progressBar.style.width = percentComplete + '%';
+                    progressText.textContent = Math.round(percentComplete) + '%';
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    showStatus(response.message);
                     playBtn.disabled = false;
                     pauseBtn.disabled = false;
                     stopBtn.disabled = false;
+                    uploadBtn.disabled = false;
+                    
+                    // Hide progress after a short delay
+                    setTimeout(() => {
+                        progressContainer.style.display = 'none';
+                        progressBar.style.width = '0%';
+                        progressText.textContent = '0%';
+                    }, 1000);
                 } else {
-                    showStatus(data.error, true);
+                    showStatus('Upload failed', true);
+                    uploadBtn.disabled = false;
+                    progressContainer.style.display = 'none';
                 }
-            } catch (error) {
-                showStatus('Error uploading file', true);
-            }
+            };
+
+            xhr.onerror = function() {
+                showStatus('Upload failed', true);
+                uploadBtn.disabled = false;
+                progressContainer.style.display = 'none';
+            };
+
+            xhr.send(formData);
         });
 
         playBtn.addEventListener('click', async () => {

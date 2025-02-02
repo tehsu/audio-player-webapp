@@ -65,7 +65,7 @@ jobs:
           title: "🚀 Docker Build Success"
           description: |
             Repository: ${{ github.repository }}
-            Branch: ${{ github.ref_name }}
+            Branch: ${{ github.ref_name }}    
             Commit: ${{ github.sha }}
             Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           color: 0x2ECC71

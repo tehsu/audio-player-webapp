@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -45,28 +46,41 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global current_media
     if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+        return jsonify({'error': 'No file part'}), 400
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({'error': 'No selected file'}), 400
 
-    if not file.filename.lower().endswith(('.mp3', '.wav', '.ogg', '.m4a')):
-        return jsonify({'error': 'Invalid file type'}), 400
-
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-    file.save(filepath)
-    
-    init_player()
-    
-    # Create a new media instance
-    instance = vlc.Instance()
-    current_media = instance.media_new(filepath)
-    player.set_media(current_media)
-    
-    return jsonify({'message': 'File uploaded successfully', 'filename': file.filename})
+    if file:
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Stream the file in chunks to handle large files
+        try:
+            chunk_size = 8192  # 8KB chunks
+            with open(filepath, 'wb') as f:
+                while True:
+                    chunk = file.stream.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            
+            init_player()
+            
+            # Create a new media instance
+            instance = vlc.Instance()
+            global current_media
+            current_media = instance.media_new(filepath)
+            player.set_media(current_media)
+            
+            return jsonify({
+                'message': 'File uploaded successfully',
+                'filename': filename
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/play', methods=['POST'])
 def play():
@@ -78,11 +92,10 @@ def play():
 
 @app.route('/pause', methods=['POST'])
 def pause():
-    if player is None:
-        return jsonify({'error': 'No audio loaded'}), 400
-    
-    player.pause()
-    return jsonify({'message': 'Paused audio'})
+    if player:
+        player.pause()
+        return jsonify({'message': 'Audio paused'})
+    return jsonify({'error': 'No audio playing'}), 400
 
 @app.route('/stop', methods=['POST'])
 def stop():

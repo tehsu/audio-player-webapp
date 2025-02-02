@@ -78,8 +78,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create a virtual display script with 4K resolution
-RUN echo '#!/bin/bash\nXvfb :99 -screen 0 3840x2160x24 &\nexport DISPLAY=:99\nsleep 1\necho "Starting Flask app..."\nexec python app.py' > /app/start.sh && \
-    chmod +x /app/start.sh
+#RUN echo '#!/bin/bash\nXvfb :99 -screen 0 3840x2160x24 &\nexport DISPLAY=:99\nsleep 1\necho "Starting Flask app..."\nexec python app.py' > /app/start.sh && \
+#    chmod +x /app/start.sh
+
+# Copy the start script
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # Expose ports for Flask and UxPlay
 EXPOSE 5000 7000 7001 7100

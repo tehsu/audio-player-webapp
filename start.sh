@@ -17,10 +17,10 @@ sleep 1
 export DISPLAY=:99
 
 # Start PulseAudio in daemon mode
-pulseaudio --start --log-target=syslog
+# pulseaudio --start --log-target=syslog
 
 # Start UxPlay with correct options
-uxplay -s 3840x2160 -v4l2 -p 7000 -fs &
+uxplay -s 3840x2160 -p &
 
 # Start Flask app
 echo "Starting Flask app..."

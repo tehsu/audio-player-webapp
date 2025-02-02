@@ -1,20 +1,19 @@
 FROM python:3.11-slim
 
-# Install requests for URL generation script
-RUN pip install requests
+# # Install requests and bs4 for URL generation script
+# RUN pip install requests beautifulsoup4
 
-# Add Blackmagic repository
-COPY scripts /tmp/scripts
-RUN chmod +x /tmp/scripts/get_blackmagic_url.py
+# # Add Blackmagic repository
+# COPY scripts /tmp/scripts
+# RUN chmod +x /tmp/scripts/get_blackmagic_url.py
 
-# Download and install Blackmagic Desktop Video
-RUN cd /tmp \
-    && DOWNLOAD_URL=$(/tmp/scripts/get_blackmagic_url.py) \
-    && echo "Download URL: $DOWNLOAD_URL" \
-    && wget --progress=dot:giga -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz "$DOWNLOAD_URL" \
-    && tar xf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
-    && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
-    && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /tmp/scripts
+# # Download and install Blackmagic Desktop Video
+# RUN cd /tmp \
+#             && wget --progress=dot:giga -O Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
+#                 "https://www.blackmagicdesign.com/support/download/5baba0af3eda41ee9cd0ec7349660d74/Linux" \
+#     && tar xf Blackmagic_Desktop_Video_Linux_14.4.1.tar.gz \
+#     && dpkg -i Blackmagic_Desktop_Video_Linux_14.4.1/deb/x86_64/desktopvideo_14.4.1_amd64.deb \
+#     && rm -rf Blackmagic_Desktop_Video_Linux_14.4.1* /tmp/scripts
 
 # Install build dependencies for UxPlay
 RUN apt-get update && apt-get install -y \

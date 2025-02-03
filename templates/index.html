@@ -143,11 +143,15 @@
             updateUI();
         });
         
-        // Event Listeners
-        uploadForm.addEventListener('submit', async (e) => {
+        // Upload form handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const file = fileInput.files[0];
-            if (!file) return;
+            
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
             
             const formData = new FormData();
             formData.append('file', file);
@@ -157,15 +161,29 @@
                     method: 'POST',
                     body: formData
                 });
-                const data = await response.json();
+                
                 if (response.ok) {
-                    console.log('File uploaded:', data);
+                    const data = await response.json();
+                    console.log('Upload successful:', data);
+                    
+                    // Enable playback controls
+                    document.getElementById('playBtn').disabled = false;
+                    document.getElementById('pauseBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = false;
+                    
+                    // Clear the file input
+                    fileInput.value = '';
+                    
+                    // Refresh the file list
                     loadFileList();
                 } else {
-                    console.error('Upload error:', data.error);
+                    const error = await response.json();
+                    console.error('Upload error:', error);
+                    alert('Upload failed: ' + error.error);
                 }
             } catch (error) {
                 console.error('Upload error:', error);
+                alert('Upload failed: ' + error.message);
             }
         });
         
@@ -233,15 +251,26 @@
                     },
                     body: JSON.stringify({ filename })
                 });
-                const data = await response.json();
+                
                 if (response.ok) {
-                    console.log('File selected:', data);
-                    loadFileList();
+                    // Enable playback controls
+                    document.getElementById('playBtn').disabled = false;
+                    document.getElementById('pauseBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = false;
+                    
+                    // Update UI
+                    const files = document.querySelectorAll('.file-item');
+                    files.forEach(file => {
+                        file.classList.remove('active');
+                        if (file.textContent === filename) {
+                            file.classList.add('active');
+                        }
+                    });
                 } else {
-                    console.error('Selection error:', data.error);
+                    console.error('Error selecting file');
                 }
             } catch (error) {
-                console.error('Selection error:', error);
+                console.error('Error:', error);
             }
         }
         
